@@ -106,7 +106,7 @@ async fn delegation_builds_tree_and_rejects_ancestor_work() {
             AssignmentOrigin::User,
             AssignmentRequester::User("user-1".to_string()),
             agent.clone(),
-            ApprovalLevel::Ask,
+            ApprovalLevel::Trusted,
         )
         .await
         .unwrap();
@@ -126,6 +126,7 @@ async fn delegation_builds_tree_and_rejects_ancestor_work() {
     assert_eq!(child.depth, 1);
     assert_eq!(child.parent_id, Some(root.id.clone()));
     assert_eq!(child.root_id, root.id);
+    assert_eq!(child.approval_level, ApprovalLevel::Trusted);
 
     let child_agent = AgentId::new("agent-3");
     let third_task = make_task(&store, &workspace_id, &child_agent, "Review the plan").await;
@@ -352,4 +353,26 @@ async fn execution_budget_failure_is_persisted() {
     assert!(events
         .iter()
         .any(|event| event.kind == AssignmentEventKind::BudgetExhausted));
+}
+
+#[test]
+fn delegation_inherits_approval_level() {
+    use cow_core::assignment::inherit_approval_level;
+
+    assert_eq!(
+        inherit_approval_level(ApprovalLevel::Trusted, ApprovalLevel::Ask),
+        ApprovalLevel::Trusted
+    );
+    assert_eq!(
+        inherit_approval_level(ApprovalLevel::Ask, ApprovalLevel::SafeAuto),
+        ApprovalLevel::SafeAuto
+    );
+    assert_eq!(
+        inherit_approval_level(ApprovalLevel::PlanOnly, ApprovalLevel::Trusted),
+        ApprovalLevel::PlanOnly
+    );
+    assert_eq!(
+        inherit_approval_level(ApprovalLevel::SafeAuto, ApprovalLevel::Ask),
+        ApprovalLevel::SafeAuto
+    );
 }
