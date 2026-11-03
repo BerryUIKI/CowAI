@@ -348,9 +348,13 @@ dependencies = [
 name = "cow-service"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "cow-agent",
  "cow-bus",
  "cow-core",
+ "cow-llm",
  "cow-store",
+ "cow-tools",
  "serde_json",
  "tokio",
 ]
