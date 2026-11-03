@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use cow_agent::Crew;
 use cow_bus::EventBus;
@@ -9,6 +10,7 @@ use cow_core::identity::WorkspaceId;
 use cow_core::task::TaskId;
 use cow_store::Store;
 
+use crate::approvals::{ApprovalService, ScopedApprovalGate};
 use crate::assignments::AssignmentService;
 
 /// Executes a sequential crew through the assignment runtime.
@@ -39,6 +41,11 @@ impl CrewRunner {
     ) -> CowResult<HashMap<TaskId, String>> {
         let tasks = crew.tasks.clone();
         let mut completed: HashMap<TaskId, String> = HashMap::new();
+        let approvals = ApprovalService::new(
+            self.assignments.store().clone(),
+            self.assignments.bus().clone(),
+            workspace_id.clone(),
+        );
 
         for task in tasks {
             let assignee = task.assigned_agent.clone().ok_or_else(|| {
@@ -71,10 +78,17 @@ impl CrewRunner {
                 .filter_map(|dependency| completed.get(dependency).cloned())
                 .collect();
 
-            match agent
+            let gate = Arc::new(ScopedApprovalGate::new(
+                approvals.clone(),
+                assignment.id.clone(),
+            ));
+            agent.set_tool_gate(Some(gate));
+            let execution = agent
                 .execute_task(&task, &context, self.assignments.bus())
-                .await
-            {
+                .await;
+            agent.clear_tool_gate();
+
+            match execution {
                 Ok(output) => {
                     self.assignments.complete(&assignment.id, &output).await?;
                     completed.insert(task.id.clone(), output);
