@@ -1,0 +1,50 @@
+[workspace]
+members = [
+    "crates/berry-core",
+    "crates/berry-bus",
+    "crates/berry-tools",
+    "crates/berry-llm",
+    "crates/berry-agent",
+    "crates/berry-cli",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["BerryBot Contributors"]
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/BerryBot/BerryBot"
+
+[workspace.dependencies]
+# Async & runtime
+tokio = { version = "1.38", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Error handling & logging
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# CLI & utilities
+clap = { version = "4.5", features = ["derive", "env"] }
+uuid = { version = "1.8", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+tempfile = "3.10"
+
+# HTTP client
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# Internal workspace crates
+berry-core = { path = "crates/berry-core" }
+berry-bus = { path = "crates/berry-bus" }
+berry-tools = { path = "crates/berry-tools" }
+berry-llm = { path = "crates/berry-llm" }
+berry-agent = { path = "crates/berry-agent" }
