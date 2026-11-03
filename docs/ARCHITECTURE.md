@@ -78,10 +78,12 @@ CLI (cowai) -- cow-client -- local mode or remote server
 
 ### 3.4 Tasks and Orchestration
 
-- Task lifecycle: `Pending -> Assigned -> Running -> WaitingApproval -> Completed / Failed / Cancelled`.
-- v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`).
-- Later: hierarchical orchestration (manager agent delegation) and DAG workflows.
+- Phase 1.4 introduces an assignment runtime (ADR-0006): each unit of agent work is an assignment record with `root_id` / `parent_id` / `depth`, origin, requester, assignee, mode, reply, status, execution/restart counters, and approval level.
+- Assignment lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes an append-only event in the same transaction.
+- v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`) on top of assignments; per-root request/execution/wake budgets; stall guard; restart reconciliation.
+- Later: hierarchical orchestration (manager agent delegation), DAG workflows, and a background wake scheduler.
 - Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
+- Phase 1.4 stores the effective approval level on the assignment; inheritance (`max(own, inherited)`) and enforcement are delivered in Phase 1.5.
 
 ### 3.5 Tools and Sandbox
 
@@ -122,11 +124,11 @@ CLI (cowai) -- cow-client -- local mode or remote server
 ### 4.1 From Channel to Deliverable
 
 1. A user `@Agent`s, creates a task card, or starts a task from a team template in a channel.
-2. The orchestrator creates the task and assigns agents (sequential in v1).
+2. The orchestrator creates an assignment (root/parent, requester, assignee) and dispatches it (sequential in v1).
 3. An agent calls the LLM and produces text or tool-call requests.
 4. The approval policy decides: auto-approve or create an approval card.
 5. Tools execute in the sandbox; results are written back to the channel and task context.
-6. The task completes; deliverables, run records, and audit events are persisted.
+6. The task completes; deliverables, assignment events, and audit records are persisted.
 
 ### 4.2 Approval Policy (Multiple Modes)
 
@@ -140,6 +142,7 @@ Inspired by Claude Code's permission modes:
 | **Trusted** | Auto-approve within a trusted workspace (admin-enabled), with auditing retained |
 
 - Rule priority: workspace policy > agent policy > global default.
+- Assignment inheritance: delegated work uses `max(own, inherited)`; the effective level is stored on the assignment record (ADR-0006, enforced in Phase 1.5).
 - Fine-grained rules: per tool, command prefix, path allowlist/denylist.
 - Risk levels: `ReadOnly` / `Low` / `Medium` / `High` / `Critical`.
 - Decision order: static rules first (tool, command pattern, path, network, destructive operations); an optional LLM classifier may handle unmatched operations and can only raise risk, never lower the static floor; undecidable operations default to `High`.
@@ -169,6 +172,8 @@ Inspired by Claude Code's permission modes:
 | `AgentProfile` | id, workspace_id, name, role, goal, backstory, model, tools, limits |
 | `Template` | id, kind (agent/team), name, payload |
 | `Task` | id, workspace_id, channel_id, description, expected_output, assignee, status, context_tasks |
+| `Assignment` | id, root_id, parent_id, depth, task_id, origin, requester, assignee, mode, reply, status, executions, restarts, approval_level, created_at, updated_at |
+| `AssignmentEvent` | id, assignment_id, kind, detail, created_at |
 | `Run` | id, task_id, agent_id, status, started_at, finished_at |
 | `ToolCall` | id, run_id, tool_name, arguments, result, approved_by |
 | `Approval` | id, task_id, tool_call_id, status, decided_by, decided_at |
