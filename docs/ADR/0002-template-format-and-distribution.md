@@ -1,37 +1,37 @@
-# ADR 0002：模板格式与分发
+# ADR 0002: Template Format and Distribution
 
-- **状态**：Accepted
-- **日期**：2026-11-03
-- **关联**：`docs/PRD.md` §5.1、`docs/ARCHITECTURE.md` §3.3
+- **Status**: Accepted
+- **Date**: 2026-11-03
+- **Related**: `docs/PRD.md` §5.1, `docs/ARCHITECTURE.md` §3.3
 
-## 背景
+## Context
 
-CowAI 需要内置 Agent 与团队模板，同时允许用户自定义与分享。模板必须在离线环境可用，且不能成为代码执行或供应链攻击的入口。
+CowAI needs built-in agent and team templates while allowing users to customize and share them. Templates must work offline and must not become an entry point for code execution or supply-chain attacks.
 
-## 决策
+## Decision
 
-1. **格式采用 JSON**，包含 `schema_version`、`kind`（`agent` / `team`）、`id`、`name`、`description`、`version`、`tags`、`agents`、`tasks` 等字段。
-2. **内置模板编译进二进制**：模板文件放在 `templates/builtin/*.json`，通过 `include_str!` 或 `rust-embed` 打包，保证离线可用且版本一致。
-3. **用户模板存入 SQLite**，可通过模板库界面查看、复制与修改。
-4. **导入/导出使用 `.cowtemplate`**（单个 JSON 文件）；workspace 包内也包含模板定义。
-5. **v1 不提供在线模板市场**；仅支持内置模板与本地文件导入/导出，在线仓库与签名机制留待 P2。
-6. **模板只引用工具名与模型配置，不内嵌可执行代码或脚本**；加载时做 JSON Schema 与语义校验，未知字段忽略以保持前向兼容。
+1. **Use JSON** with fields including `schema_version`, `kind` (`agent` / `team`), `id`, `name`, `description`, `version`, `tags`, `agents`, and `tasks`.
+2. **Compile built-in templates into the binary**: template files live in `templates/builtin/*.json` and are bundled via `include_str!` or `rust-embed`, guaranteeing offline availability and version consistency.
+3. **Store user templates in SQLite**, viewable, copyable, and editable through the template library UI.
+4. **Import/export uses `.cowtemplate`** (a single JSON file); workspace packages also contain template definitions.
+5. **No online template marketplace in v1**; only built-in templates and local file import/export. An online registry and signing are deferred to P2.
+6. **Templates only reference tool names and model configuration; they never embed executable code or scripts.** Loading validates against a JSON Schema plus semantic checks; unknown fields are ignored for forward compatibility.
 
-## 理由
+## Rationale
 
-- JSON 可读、可 diff、与 HTTP API 使用同一套序列化；
-- 编译内置模板避免首次启动依赖网络或文件系统；
-- 禁止内嵌代码降低供应链与提权风险；
-- 文件导入/导出满足分享需求，且不引入服务端依赖。
+- JSON is readable, diffable, and uses the same serialization as the HTTP API;
+- Compiling templates into the binary avoids network or filesystem dependencies at first launch;
+- Prohibiting embedded code reduces supply-chain and privilege-escalation risk;
+- File import/export supports sharing without introducing a server dependency.
 
-## 后果
+## Consequences
 
-- 需要维护模板 `schema_version` 与迁移策略；
-- 在线市场、签名校验与模板评分需要后续设计；
-- 模板中的工具引用需要在导入时校验是否存在。
+- A template `schema_version` and migration strategy must be maintained;
+- An online marketplace, signature verification, and template ratings require later design;
+- Tool references in templates must be validated at import time.
 
-## 备选方案
+## Alternatives
 
-- **TOML / YAML**：可读性好，但需要额外的 API 转换层，跨端一致性较弱。
-- **仅数据库存储**：便于管理，但不方便分享与版本控制。
-- **在线仓库优先**：体验好，但离线场景不可用，且引入信任问题。
+- **TOML / YAML**: readable, but requires an extra API conversion layer and weaker cross-platform consistency.
+- **Database-only storage**: easy to manage but awkward to share and version-control.
+- **Online registry first**: good UX but unusable offline and introduces trust problems.

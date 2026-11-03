@@ -1,50 +1,50 @@
-# ADR 0001：运行时与部署模型
+# ADR 0001: Runtime and Deployment Model
 
-- **状态**：Accepted（部署形态由用户授权决策）
-- **日期**：2026-11-03
-- **关联**：`docs/PRD.md` §2.7
-- **决策者**：CowAI 项目
+- **Status**: Accepted (deployment form delegated to the implementation by the user)
+- **Date**: 2026-11-03
+- **Related**: `docs/PRD.md` §2.7
+- **Decision makers**: CowAI project
 
-## 背景
+## Context
 
-CowAI 需要同时满足三类诉求：
+CowAI must satisfy three requirements at once:
 
-1. **个人离线使用**：不依赖外部服务端，数据留在本机；
-2. **团队/企业自托管**：多用户、工作区共享、私有网络部署；
-3. **未来扩展**：可接浏览器入口、Webhook 与更多运行环境。
+1. **Offline personal use**: no external server, with data staying on the local machine.
+2. **Team/enterprise self-hosting**: multiple users, shared workspaces, private-network deployment.
+3. **Future expansion**: browser entry points, webhooks, and additional runtimes.
 
-此前的 CLI-only 基线无法承载频道式人机协作、多用户与桌面控制台体验，因此需要明确运行时与部署模型。
+The previous CLI-only baseline cannot carry channel-native human-AI collaboration, multi-user support, or a desktop console, so the runtime and deployment model must be decided explicitly.
 
-## 决策
+## Decision
 
-1. **单一 Rust 核心库**：业务逻辑集中在 `cow-core` 及其下游 crate，桌面端与服务端共享，避免两套实现。
-2. **桌面端采用 Tauri**：Rust 后端 + Web 前端，打包 Windows / macOS / Linux；内置本地核心与 SQLite，默认无需服务端。
-3. **服务端为无头 Rust 服务**：新增 `cow-server`，暴露 HTTP + WebSocket API，支持单二进制与 Docker 部署。
-4. **统一客户端抽象**：桌面端通过 `cow-client` 访问核心：
-   - **本地模式**：进程内调用核心库，低延迟、零配置；
-   - **团队模式**：通过 HTTP/WebSocket 连接 `cow-server`。
-5. **存储策略**：默认 SQLite（桌面与小型服务端）；企业规模可选 PostgreSQL（P1），通过存储抽象切换。
-6. **多用户从 v1 进入数据模型与 API**：`User`、`Workspace`、`Membership`、`Role` 从一开始存在；本地模式自动创建单用户工作区。
+1. **Single Rust core**: business logic lives in `cow-core` and its downstream crates, shared by desktop and server to avoid duplicate implementations.
+2. **Desktop app uses Tauri**: Rust backend + web frontend, packaged for Windows / macOS / Linux; embeds the core and SQLite and needs no server by default.
+3. **Server is a headless Rust service**: a new `cow-server` exposes HTTP + WebSocket APIs and supports single-binary and Docker deployment.
+4. **Unified client abstraction**: the desktop app accesses the core through `cow-client`:
+   - **Local mode**: in-process calls into the core, low latency and zero configuration;
+   - **Team mode**: HTTP/WebSocket connection to `cow-server`.
+5. **Storage strategy**: SQLite by default (desktop and small servers); PostgreSQL optional for enterprise scale (P1), switchable through a storage abstraction.
+6. **Multi-user enters the data model and APIs from v1**: `User`, `Workspace`, `Membership`, and `Role` exist from the start; local mode auto-creates a single-user workspace.
 
-## 理由
+## Rationale
 
-- Tauri 与 Rust 技术栈一致，产物体积与内存占用显著低于 Electron；
-- 无头服务 + 单二进制符合自托管与企业内网部署习惯；
-- 进程内调用避免桌面端必须常驻本地服务进程与端口管理；
-- SQLite 降低首次部署门槛，存储抽象为 PostgreSQL 留出空间；
-- 统一的核心边界与 API 契约使本地模式与团队模式行为一致。
+- Tauri matches the Rust stack and has a significantly smaller footprint than Electron;
+- A headless service plus a single binary fits self-hosted and enterprise intranet deployments;
+- In-process calls avoid requiring a local server process and port management on the desktop;
+- SQLite lowers the first-deployment barrier while the storage abstraction leaves room for PostgreSQL;
+- A shared core boundary and API contract keep local and team modes behaviorally consistent.
 
-## 后果
+## Consequences
 
-- 需要设计稳定的核心 API 边界与 `cow-client` 抽象；
-- 桌面端与服务端的认证/会话机制不同（本地会话 vs 服务端账号）；
-- 本地模式与团队模式之间的数据同步、导入导出需要单独设计；
-- 前端技术栈待定，但由 Tauri WebView 隔离，可独立演进；
-- 新增 `cow-server`、`cow-client`、`cow-store` 等 crate，需分阶段落地。
+- A stable core API boundary and a `cow-client` abstraction must be designed;
+- Authentication and sessions differ between desktop (local session) and server (account-based);
+- Data synchronization or import/export between local and team modes must be designed separately;
+- The frontend stack remains open but is isolated by the Tauri WebView and can evolve independently;
+- New crates (`cow-server`, `cow-client`, `cow-store`) are added and delivered in phases.
 
-## 备选方案
+## Alternatives
 
-- **Electron**：生态成熟，但体积/内存开销大，与 Rust 核心复用度低。
-- **纯浏览器 SPA + 服务端**：无法满足"可选无服务端"的桌面离线需求。
-- **CLI-only**：无法承载频道式协作与控制台体验。
-- **桌面端启动本地服务进程**：可行，但增加进程管理与端口冲突复杂度，暂不作为默认。
+- **Electron**: mature ecosystem but larger footprint and lower reuse of the Rust core.
+- **Browser-only SPA + server**: cannot satisfy the optional serverless desktop/offline requirement.
+- **CLI-only**: cannot carry channel-native collaboration or a console experience.
+- **Desktop launches a local server process**: feasible but adds process management and port-conflict complexity; not the default.
