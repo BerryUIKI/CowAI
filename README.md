@@ -1,107 +1,138 @@
-# 🐄 CowAI
+<p align="center">
+  <img src="assets/brand/cowai-icon.png" alt="CowAI cow icon" width="144" height="144">
+</p>
 
-> **Open-Source, High-Performance Multi-Agent Collaboration Platform in Rust**
+<h1 align="center">CowAI</h1>
 
-CowAI is a modern, modular multi-agent platform designed for collaborative software engineering and automation. Built in Rust for speed, safety, and deterministic concurrency, CowAI combines the structured role-and-task delegation of **[CrewAI](https://github.com/crewAIInc/crewAI)** with the channel-based, event-driven collaboration patterns of **[Mattermost](https://github.com/mattermost/mattermost)**.
+<p align="center">
+  <strong>Agents that work together. A workspace you control.</strong><br>
+  An open-source, local-first multi-agent collaboration platform built in Rust.
+</p>
 
----
+<p align="center">
+  <a href="https://www.rust-lang.org/">Built with Rust</a> ·
+  <a href="docs/ROADMAP.md">Phase 1 in progress</a> ·
+  <a href="#license">MIT OR Apache-2.0</a>
+</p>
 
-## 🌟 Key Features
-
-- **⚡ Blazing Fast & Memory Safe**: Written in 100% safe Rust on top of the Tokio async ecosystem. Single binary deployment with zero runtime overhead.
-- **🤖 CrewAI-Style Orchestration**:
-  - **Agents**: Configured with `role`, `goal`, `backstory`, capabilities, and iteration limits.
-  - **Tasks**: Explicit descriptions, expected deliverables, and prerequisite context chaining.
-  - **Crews**: Group agents into sequential or hierarchical workflows.
-  - **Assignment runtime**: Task trees, event-logged lifecycle transitions, budgets, stall guards, and restart reconciliation.
-- **💬 Mattermost-Inspired Collaboration**:
-  - Asynchronous event bus (`cow-bus`) supporting pub/sub event distribution.
-  - Structured channels and threaded messages for human-in-the-loop supervision and agent collaboration.
-- **🛡️ Secure Code Sandbox**:
-  - `cow-tools` includes a subprocess sandbox for executing code, running shell commands, and manipulating files with timeout protection and output truncation.
-- **🗄️ Local-First Persistence**:
-  - `cow-store` provides embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, approvals, and audit events.
-- **🧩 Built-in Templates**:
-  - JSON agent and team templates are compiled into the app; user templates support `.cowtemplate` import/export with schema validation.
-- **🔌 Pluggable LLM Providers**:
-  - First-class support for OpenAI, DeepSeek, Ollama, OpenRouter, and any OpenAI-compatible API, plus local mock providers for deterministic testing.
+<p align="center">
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#what-works-today">Features</a> ·
+  <a href="docs/ARCHITECTURE.md">Architecture</a> ·
+  <a href="docs/ROADMAP.md">Roadmap</a> ·
+  <a href="assets/README.md">Brand assets</a>
+</p>
 
 ---
 
-## 🏗️ Architecture
+CowAI brings role-based agent teams, tasks, and channel-based collaboration into one modular platform. It draws on [CrewAI](https://github.com/crewAIInc/crewAI)'s role-and-task orchestration and [Mattermost](https://github.com/mattermost/mattermost)'s channel-based collaboration model.
 
-```
-CowAI/
-├── Cargo.toml                  # Workspace root manifest
-├── CLAUDE.md                   # AI developer guidelines
-├── crates/
-│   ├── cow-core/      # Core domain models (Agent, Task, Channel, Tool, Event)
-│   ├── cow-bus/       # Tokio broadcast event bus and pub/sub routing
-│   ├── cow-tools/     # Code execution sandbox & filesystem tools
-│   ├── cow-llm/       # OpenAI-compatible & Mock LLM providers
-│   ├── cow-agent/     # Agent runtime loop & Crew orchestration
-│   ├── cow-store/     # SQLite persistence, migrations, and repositories
-│   ├── cow-service/   # Local bootstrap, channel, and message services
-│   └── cow-cli/       # Command-line interface (`cowai`)
-```
+The Rust runtime and CLI work today. The local desktop experience is being built incrementally, with self-hosted team mode planned after the local MVP.
 
----
+## What works today
 
-## 🚀 Quick Start
+| Capability | Available now |
+| --- | --- |
+| Agent crews | Roles, goals, backstories, tool-calling loops, and sequential workflows with context chaining |
+| Assignment runtime | Task trees, lifecycle event logs, budgets, stall guards, and restart reconciliation |
+| Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
+| Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
+| Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
+| Tools | Subprocess execution and file operations with execution timeouts and output limits |
+| Model providers | OpenAI-compatible endpoints, including DeepSeek, Ollama, and OpenRouter; mock providers for offline testing |
 
-### Prerequisites
-- [Rust](https://rustup.rs/) (1.75+ recommended)
+**In progress:** Phase 1 milestones 1.1–1.4 are implemented. Tool approval policies, the desktop UI, and packaging are next. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
-### Build the Project
+## Quick start
+
+Install the [Rust toolchain](https://rustup.rs/), then build from the integration branch:
+
 ```bash
+git clone --branch dev https://github.com/BerryUIKI/CowAI.git
+cd CowAI
 cargo build --workspace
 ```
 
-### Run Tests
+### Try an agent crew offline
+
+The mock provider runs without an API key:
+
 ```bash
-cargo test --workspace
+cargo run -p cow-cli -- run \
+  --task "Plan a REST API for a task tracker" \
+  --dry-run
 ```
 
-### Inspect Available Tools
-```bash
-cargo run -p cow-cli -- tools
-```
+### Connect a model
 
-### Run an Autonomous Multi-Agent Task
-```bash
-# Dry-run mode (using built-in mock LLM)
-cargo run -p cow-cli -- run --task "Build a REST API endpoint for user authentication" --dry-run
+With an OpenAI API key, run a task against a live model:
 
-# Live execution with OpenAI / DeepSeek / Ollama
+```bash
 export OPENAI_API_KEY="your-api-key"
-cargo run -p cow-cli -- run --task "Implement a snake game in Python" --model gpt-4o
+cargo run -p cow-cli -- run \
+  --task "Implement a snake game in Python" \
+  --model gpt-4o
+```
 
-# Using local Ollama
+For a local Ollama endpoint, use an installed model:
+
+```bash
 cargo run -p cow-cli -- run \
   --task "Analyze log files" \
   --base-url "http://localhost:11434/v1" \
   --model "llama3"
 ```
 
----
+These examples use a POSIX shell. In PowerShell, set the key with `$env:OPENAI_API_KEY = "your-api-key"` and put each `cargo run` command on one line.
 
-## 🤝 Roadmap & Community
+### Explore the CLI
 
-- [x] Cargo workspace modular architecture
-- [x] Tokio broadcast event bus (`cow-bus`)
-- [x] Pluggable subprocess code execution sandbox (`cow-tools`)
-- [x] CrewAI-inspired Agent, Task, and Crew abstractions (`cow-agent`)
-- [x] OpenAI / DeepSeek / Ollama provider client (`cow-llm`)
-- [ ] Docker container sandbox backend
-- [ ] Webhook & REST API server for Mattermost / Slack bot integrations
-- [ ] Interactive Web / TUI multi-agent collaboration dashboard
+```bash
+cargo run -p cow-cli -- --help
+cargo run -p cow-cli -- tools
+```
 
----
+## Architecture
 
-## 📄 License
+Eight focused crates keep the domain model, runtime, and application services separate:
 
-Licensed under either of:
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or http://www.apache.org/licenses/LICENSE-2.0)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or http://opensource.org/licenses/MIT)
+| Crate | Responsibility |
+| --- | --- |
+| [`cow-core`](crates/cow-core) | Domain models, assignments, tools, and events |
+| [`cow-bus`](crates/cow-bus) | Tokio broadcast event bus and in-memory event history |
+| [`cow-tools`](crates/cow-tools) | Tool registry, subprocess sandbox, and file tools |
+| [`cow-llm`](crates/cow-llm) | OpenAI-compatible client and mock providers |
+| [`cow-agent`](crates/cow-agent) | Agent execution loops, roles, and crew orchestration |
+| [`cow-store`](crates/cow-store) | SQLite migrations, persistence, and repositories |
+| [`cow-service`](crates/cow-service) | Local bootstrap, collaboration, templates, and assignment services |
+| [`cow-cli`](crates/cow-cli) | The `cowai` command-line interface |
 
-at your option.
+Read the [functional and system architecture](docs/ARCHITECTURE.md) for the planned desktop and server boundaries.
+
+## Documentation
+
+| Guide | Purpose |
+| --- | --- |
+| [Product requirements](docs/PRD.md) | Users, workflows, and product scope |
+| [Architecture](docs/ARCHITECTURE.md) | Functional domains and system design |
+| [Roadmap](docs/ROADMAP.md) | Local MVP → self-hosted teams → ecosystem extensions |
+| [Architecture decisions](docs/ADR) | Recorded design decisions and tradeoffs |
+| [Template format](docs/TEMPLATE_FORMAT.md) | Agent and team template schema |
+| [Design references](docs/REFERENCES.md) | External references informing the platform |
+| [Brand assets](assets/README.md) | Canonical icon, exports, and asset maintenance |
+
+## Development
+
+Run the workspace quality checks before submitting code changes:
+
+```bash
+cargo fmt --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
+
+Keep contributions small and focused. Branch from `dev` using `feature/<name>` and open pull requests against `dev`. `main` is the release branch; releases are promoted separately. Repository documentation, code, and commit messages use English. See [CLAUDE.md](CLAUDE.md) for development conventions.
+
+## License
+
+The workspace declares `MIT OR Apache-2.0`: your choice of the [MIT License](https://opensource.org/licenses/MIT) or [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [Cargo.toml](Cargo.toml) for package metadata.
