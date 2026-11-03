@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="assets/brand/cowai-icon.png" alt="CowAI cow icon" width="144" height="144">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cowai-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/cowai-wordmark-light.svg">
+    <img src="assets/brand/cowai-wordmark-light.svg" alt="CowAI — a cow icon beside serif lettering" width="440">
+  </picture>
 </p>
-
-<h1 align="center">CowAI</h1>
 
 <p align="center">
   <strong>Agents that work together. A workspace you control.</strong><br>
