@@ -1,237 +1,237 @@
-# CowAI 功能与技术架构（草案）
+# CowAI Functional and System Architecture (Draft)
 
-> **状态**：Draft v0.1（待与用户逐节确认）
-> **日期**：2026-11-03
-> **关联**：`docs/PRD.md`、`docs/ADR/0001-runtime-and-deployment.md`
-
----
-
-## 1. 架构原则
-
-1. **单一核心，多形态运行**：桌面端与服务端共享同一套 Rust 领域模型与业务逻辑。
-2. **本地优先，多用户就绪**：默认无服务端可用，但账号、工作区与权限模型从 v1 就存在。
-3. **API 优先**：桌面端、CLI 与未来集成统一通过 `cow-client` / HTTP + WebSocket 访问能力。
-4. **事件驱动**：消息、任务状态、工具调用、审批都通过事件总线广播，便于实时 UI 与审计。
-5. **配置优先于硬编码**：角色、工具、模板、审批策略均可配置，不把软件工程场景写死。
-6. **安全默认**：危险操作默认需要审批；沙箱限制工作目录、超时与输出。
-7. **小步演进**：每个阶段可独立发布、可测试、可回滚。
+> **Status**: Draft v0.1 (to be confirmed section by section)
+> **Date**: 2026-11-03
+> **Related**: `docs/PRD.md`, `docs/ADR/0001-runtime-and-deployment.md`
 
 ---
 
-## 2. 运行时与部署
+## 1. Architecture Principles
+
+1. **One core, multiple runtime forms**: desktop and server share the same Rust domain model and business logic.
+2. **Local-first, multi-user-ready**: the platform works without a server by default, yet accounts, workspaces, and permissions exist from v1.
+3. **API-first**: the desktop app, CLI, and future integrations all access capabilities through `cow-client` or HTTP + WebSocket.
+4. **Event-driven**: messages, task state, tool calls, and approvals are broadcast over the event bus for real-time UI and auditing.
+5. **Configuration over hard-coding**: roles, tools, templates, and approval policies are configurable; software engineering is not baked in.
+6. **Secure by default**: risky operations require approval; the sandbox restricts working directories, timeouts, and output size.
+7. **Incremental delivery**: every phase can be released, tested, and rolled back independently.
+
+---
+
+## 2. Runtime and Deployment
 
 ```
-┌──────────────────────────── Desktop (Tauri) ────────────────────────────┐
-│  Web 前端（频道 / 任务 / Agent / 审批 / 设置）                          │
-│        │ Tauri IPC / HTTP                                               │
-│  cow-client ──┬── 本地模式：进程内调用 cow-* 核心 + SQLite               │
-│               └── 团队模式：HTTP/WebSocket → cow-server                  │
-└─────────────────────────────────────────────────────────────────────────┘
++---------------------------- Desktop (Tauri) -----------------------------+
+|  Web frontend (channels / tasks / agents / approvals / settings)        |
+|        | Tauri IPC / HTTP                                               |
+|  cow-client --+-- Local mode: in-process cow-* core + SQLite            |
+|               +-- Team mode: HTTP/WebSocket -> cow-server               |
++-------------------------------------------------------------------------+
 
-┌──────────────────────────── 自托管服务器 ──────────────────────────────┐
-│  cow-server（HTTP + WebSocket API、认证、工作区、权限）                 │
-│        │                                                                │
-│  cow-agent / cow-tools / cow-llm / cow-bus / cow-store                  │
-│        │                                                                │
-│  SQLite（默认）或 PostgreSQL（P1）                                      │
-└─────────────────────────────────────────────────────────────────────────┘
++---------------------------- Self-hosted server --------------------------+
+|  cow-server (HTTP + WebSocket API, auth, workspaces, permissions)       |
+|        |                                                                |
+|  cow-agent / cow-tools / cow-llm / cow-bus / cow-store                  |
+|        |                                                                |
+|  SQLite (default) or PostgreSQL (P1)                                    |
++-------------------------------------------------------------------------+
 
-CLI（cowai）── cow-client ── 本地模式或远程服务器
+CLI (cowai) -- cow-client -- local mode or remote server
 ```
 
-- 桌面端默认本地模式，无需服务端；切换到团队模式只需更换 `cow-client` 的实现与连接配置。
-- 服务端从 v1 起支持多用户；本地模式自动创建单用户工作区，但数据模型与服务端一致。
+- The desktop app runs in local mode by default and needs no server; switching to team mode only changes the `cow-client` implementation and connection settings.
+- The server supports multiple users from v1; local mode auto-creates a single-user workspace, but the data model matches the server.
 
-### 2.1 实施顺序
+### 2.1 Implementation Order
 
-1. **本地/离线优先**：桌面端 + 核心 + SQLite + 模板 + 审批 + 工具沙箱。
-2. **自托管团队模式**：`cow-server`、多用户、邀请、API Token、远程客户端。
-3. **扩展**：Docker 沙箱、IM/Webhook、长期记忆、PostgreSQL、模板市场。
-
----
-
-## 3. 功能域划分
-
-### 3.1 身份与工作区（Identity & Workspace）
-
-- 实体：`User`、`Workspace`、`Membership`、`Role`（Owner / Admin / Member）。
-- 本地模式：首次启动自动创建本地 Owner 与默认工作区。
-- 团队模式：账号注册/登录、工作区邀请、成员角色管理、API Token。
-- v1 认证：本地账号（Argon2id）、服务端不透明会话 Token、API Token；OIDC/SSO 为 P1。
-
-### 3.2 协作空间（Collaboration）
-
-- 实体：`Channel`、`Thread`、`Message`、`Mention`、`TaskCard`、`ApprovalCard`。
-- 人类与 Agent 都是频道成员；消息持久化并按时间线展示。
-- `@Agent` 或任务卡片触发任务；Agent 的思考、工具调用、审批与交付物回写频道。
-- 频道是协作主界面，但不限制使用方式：用户可自由创建频道与线程。
-
-### 3.3 Agent 与模板（Agents & Templates）
-
-- `AgentProfile`：名称、角色、目标、背景、模型、工具集、迭代上限、是否允许委派。
-- 内置模板库：角色模板与团队模板（如开发团队、研究团队、写作团队），可在创建时选用。
-- 模板支持自定义、导入/导出；模板只是起点，不绑定具体场景。
-- 模板格式为 JSON（`schema_version` / `kind` / `agents` / `tasks`）；内置模板编译进二进制，用户模板存 SQLite，可导出为 `.cowtemplate`。
-- 模板只引用工具名与模型配置，不内嵌可执行代码；v1 不提供在线模板市场。
-
-### 3.4 任务与编排（Tasks & Orchestration）
-
-- 任务生命周期：`Pending → Assigned → Running → WaitingApproval → Completed / Failed / Cancelled`。
-- v1 范围（已确认）：单 Agent 任务 + 顺序 Crew（`ProcessType::Sequential`）。
-- 后续：层级编排（Manager Agent 委派）与 DAG 工作流。
-- 任务支持前置依赖（`context_tasks`），前置交付物注入下游上下文。
-
-### 3.5 工具与沙箱（Tools & Sandbox）
-
-- `Tool` trait 与 `ToolRegistry`：工具名、描述、参数 Schema、异步执行。
-- 内置工具：代码执行、文件读取、文件写入；后续扩展网络访问、检索、浏览器等。
-- `SandboxBackend`：v1 为本地子进程；P1 增加 Docker；P2 评估 WASM。
-- 资源限制：超时、输出截断、工作目录约束、环境变量过滤。
-
-### 3.6 模型网关（Model Gateway）
-
-- `LlmProvider` 抽象；v1 提供 OpenAI 兼容客户端（云 API、DeepSeek、Ollama、LocalAI）与 Mock。
-- 模型配置属于工作区/Agent 级；支持连接测试。
-- P1 增加流式响应、重试/退避、限流、Token 与成本统计。
-
-### 3.7 记忆与知识（Memory）
-
-- v1（已确认）：会话上下文 + 频道/任务历史作为短期记忆来源。
-- P1：项目级长期记忆与知识库（检索增强），需要明确存储与隐私边界。
-- Agent 记忆不得跨工作区泄漏。
-
-### 3.8 持久化与审计（Persistence & Audit）
-
-- `CowStore` 抽象；v1 实现 SQLite（WAL），PostgreSQL 推迟到服务端阶段（P1）。
-- 存储实体：用户、工作区、成员、频道、消息、Agent、模板、任务、运行记录、工具调用、审批、审计事件。
-- 审计事件记录：谁在何时批准/拒绝了什么操作、Agent 执行了哪些工具。
-
-### 3.9 接入层（Access）
-
-- **桌面 UI**：Tauri Web 前端，频道、任务、Agent、审批、设置。
-- **HTTP/WebSocket API**：`cow-server` 提供给桌面团队模式、CLI 与未来浏览器入口。
-- **CLI**：`cowai` 用于初始化、诊断、无头运行与调试。
-- **Webhook / IM**（P1）：Mattermost、Slack、飞书等。
+1. **Local/offline first**: desktop app + core + SQLite + templates + approvals + tool sandbox.
+2. **Self-hosted team mode**: `cow-server`, multi-user accounts, invitations, API tokens, remote client.
+3. **Extensions**: Docker sandbox, IM/Webhooks, long-term memory, PostgreSQL, template marketplace.
 
 ---
 
-## 4. 核心流程
+## 3. Functional Domains
 
-### 4.1 从频道到交付
+### 3.1 Identity and Workspace
 
-1. 用户在频道中 `@Agent`、创建任务卡片，或选择团队模板发起任务；
-2. 编排器创建任务并分配 Agent（v1 顺序执行）；
-3. Agent 调用 LLM，产生文本或工具调用请求；
-4. 审批策略判定：自动放行或生成审批卡片；
-5. 工具在沙箱中执行，结果回写频道与任务上下文；
-6. 任务完成，交付物、执行记录与审计事件落库。
+- Entities: `User`, `Workspace`, `Membership`, `Role` (Owner / Admin / Member).
+- Local mode: first launch auto-creates a local Owner and a default workspace.
+- Team mode: sign-up/sign-in, workspace invitations, member role management, API tokens.
+- v1 authentication: local accounts (Argon2id), opaque server session tokens, API tokens; OIDC/SSO is P1.
 
-### 4.2 审批策略（多档）
+### 3.2 Collaboration
 
-参考 Claude Code 的多档权限模式：
+- Entities: `Channel`, `Thread`, `Message`, `Mention`, `TaskCard`, `ApprovalCard`.
+- Humans and agents are both channel members; messages are persisted and shown on a timeline.
+- `@Agent` mentions or task cards trigger tasks; agent reasoning, tool calls, approvals, and deliverables are written back to the channel.
+- Channels are the primary collaboration surface but do not restrict usage: users can create channels and threads freely.
 
-| 模式 | 行为 |
+### 3.3 Agents and Templates
+
+- `AgentProfile`: name, role, goal, backstory, model, tool set, iteration limit, delegation flag.
+- Built-in template library: role templates and team templates (e.g., development, research, writing teams) selectable at creation time.
+- Templates can be customized, imported, and exported; they are a starting point, not a fixed scenario.
+- Template format is JSON (`schema_version` / `kind` / `agents` / `tasks`); built-in templates are compiled into the binary, user templates are stored in SQLite, and exports use `.cowtemplate`.
+- Templates only reference tool names and model configuration; they never embed executable code. v1 has no online template marketplace.
+
+### 3.4 Tasks and Orchestration
+
+- Task lifecycle: `Pending -> Assigned -> Running -> WaitingApproval -> Completed / Failed / Cancelled`.
+- v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`).
+- Later: hierarchical orchestration (manager agent delegation) and DAG workflows.
+- Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
+
+### 3.5 Tools and Sandbox
+
+- `Tool` trait and `ToolRegistry`: name, description, parameter schema, async execution.
+- Built-in tools: code execution, file read, file write; later: network access, retrieval, browser, and more.
+- `SandboxBackend`: local subprocess in v1; Docker in P1; WASM evaluated in P2.
+- Resource limits: timeout, output truncation, working-directory restriction, environment-variable filtering.
+
+### 3.6 Model Gateway
+
+- `LlmProvider` abstraction; v1 provides an OpenAI-compatible client (cloud APIs, DeepSeek, Ollama, LocalAI) and a Mock provider.
+- Model configuration is workspace- or agent-scoped, with a connection test.
+- P1 adds streaming, retries/backoff, rate limiting, and token/cost accounting.
+
+### 3.7 Memory
+
+- v1 (confirmed): session context plus channel/task history as the short-term memory source.
+- P1: project-level long-term memory and knowledge base (retrieval-augmented), with explicit storage and privacy boundaries.
+- Agent memory must never leak across workspaces.
+
+### 3.8 Persistence and Audit
+
+- `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
+- Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, runs, tool calls, approvals, and audit events.
+- Audit events record who approved or rejected what, and which tools an agent executed.
+
+### 3.9 Access Layer
+
+- **Desktop UI**: Tauri web frontend for channels, tasks, agents, approvals, and settings.
+- **HTTP/WebSocket API**: `cow-server` serves desktop team mode, the CLI, and a future browser entry point.
+- **CLI**: `cowai` for initialization, diagnostics, headless runs, and debugging.
+- **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
+
+---
+
+## 4. Core Flows
+
+### 4.1 From Channel to Deliverable
+
+1. A user `@Agent`s, creates a task card, or starts a task from a team template in a channel.
+2. The orchestrator creates the task and assigns agents (sequential in v1).
+3. An agent calls the LLM and produces text or tool-call requests.
+4. The approval policy decides: auto-approve or create an approval card.
+5. Tools execute in the sandbox; results are written back to the channel and task context.
+6. The task completes; deliverables, run records, and audit events are persisted.
+
+### 4.2 Approval Policy (Multiple Modes)
+
+Inspired by Claude Code's permission modes:
+
+| Mode | Behavior |
 | --- | --- |
-| **Ask（默认）** | 每个敏感工具调用都请求批准；可批准一次、本会话、始终 |
-| **SafeAuto** | 只读/安全操作自动放行，写入/执行仍请求批准 |
-| **PlanOnly** | Agent 只做规划与只读调查，不执行写操作 |
-| **Trusted** | 可信工作区内自动放行（需管理员开启），保留审计 |
+| **Ask (default)** | Every sensitive tool call requires approval; approve once, for this session, or always |
+| **SafeAuto** | Read-only/safe operations auto-approve; writes/executions still require approval |
+| **PlanOnly** | Agents may plan and investigate read-only, but cannot write |
+| **Trusted** | Auto-approve within a trusted workspace (admin-enabled), with auditing retained |
 
-- 规则优先级：工作区策略 > Agent 策略 > 全局默认。
-- 细粒度规则：按工具、命令前缀、路径白名单/黑名单。
-- 风险等级：`ReadOnly` / `Low` / `Medium` / `High` / `Critical`。
-- 判定顺序：静态规则优先（工具、命令模式、路径、网络、破坏性操作）；未命中时可选用 LLM 分类器，且只能上调风险、不能低于静态下限；无法判定按 `High` 处理。
-- 决策记录：规则 ID / 分类器 / 人工，与审批人一并写入审计。
+- Rule priority: workspace policy > agent policy > global default.
+- Fine-grained rules: per tool, command prefix, path allowlist/denylist.
+- Risk levels: `ReadOnly` / `Low` / `Medium` / `High` / `Critical`.
+- Decision order: static rules first (tool, command pattern, path, network, destructive operations); an optional LLM classifier may handle unmatched operations and can only raise risk, never lower the static floor; undecidable operations default to `High`.
+- Decision record: rule ID / classifier / human, together with the approver, written to the audit log.
 
-### 4.3 本地模式与团队模式
+### 4.3 Local Mode vs. Team Mode
 
-- **本地模式**：单用户、进程内核心、SQLite；无需网络与服务端。
-- **团队模式**：多用户、远程 `cow-server`、共享工作区；桌面端只做展示与交互。
-- 两种模式共用领域模型与 UI；差异封装在 `cow-client` 与认证层。
-- **数据打通（v1）**：两种模式的数据相互独立，通过导入/导出迁移（工作区包、模板包、任务归档），不做双向同步。
+- **Local mode**: single user, in-process core, SQLite; no network or server required.
+- **Team mode**: multi-user, remote `cow-server`, shared workspaces; the desktop app only renders and interacts.
+- Both modes share the domain model and UI; differences are encapsulated in `cow-client` and the auth layer.
+- **Data exchange (v1)**: the two modes keep independent data and migrate via import/export (workspace packages, template packages, task archives); no bidirectional sync.
 
 ---
 
-## 5. 逻辑数据模型（草案）
+## 5. Logical Data Model (Draft)
 
-| 实体 | 关键字段 |
+| Entity | Key Fields |
 | --- | --- |
-| `User` | id、name、email、password_hash、created_at |
-| `Workspace` | id、name、created_at |
-| `Membership` | user_id、workspace_id、role |
-| `Session` | id、user_id、token_hash、expires_at、created_at |
-| `ApiToken` | id、user_id、workspace_id、token_hash、scopes、revoked_at |
-| `Invite` | id、workspace_id、token_hash、role、expires_at |
-| `Channel` | id、workspace_id、name、topic、created_at |
-| `Message` | id、channel_id、sender、content、thread_id、created_at |
-| `AgentProfile` | id、workspace_id、name、role、goal、backstory、model、tools、limits |
-| `Template` | id、kind（agent/team）、name、payload |
-| `Task` | id、workspace_id、channel_id、description、expected_output、assignee、status、context_tasks |
-| `Run` | id、task_id、agent_id、status、started_at、finished_at |
-| `ToolCall` | id、run_id、tool_name、arguments、result、approved_by |
-| `Approval` | id、task_id、tool_call_id、status、decided_by、decided_at |
-| `AuditEvent` | id、workspace_id、actor、action、target、created_at |
+| `User` | id, name, email, password_hash, created_at |
+| `Workspace` | id, name, created_at |
+| `Membership` | user_id, workspace_id, role |
+| `Session` | id, user_id, token_hash, expires_at, created_at |
+| `ApiToken` | id, user_id, workspace_id, token_hash, scopes, revoked_at |
+| `Invite` | id, workspace_id, token_hash, role, expires_at |
+| `Channel` | id, workspace_id, name, topic, created_at |
+| `Message` | id, channel_id, sender, content, thread_id, created_at |
+| `AgentProfile` | id, workspace_id, name, role, goal, backstory, model, tools, limits |
+| `Template` | id, kind (agent/team), name, payload |
+| `Task` | id, workspace_id, channel_id, description, expected_output, assignee, status, context_tasks |
+| `Run` | id, task_id, agent_id, status, started_at, finished_at |
+| `ToolCall` | id, run_id, tool_name, arguments, result, approved_by |
+| `Approval` | id, task_id, tool_call_id, status, decided_by, decided_at |
+| `AuditEvent` | id, workspace_id, actor, action, target, created_at |
 
-> 最终字段以 `cow-store` 的迁移脚本为准。
+> Final field definitions will follow the `cow-store` migrations.
 
 ---
 
-## 6. Crate 映射与规划
+## 6. Crate Map and Plan
 
-| Crate | 职责 | 状态 |
+| Crate | Responsibility | Status |
 | --- | --- | --- |
-| `cow-core` | 领域模型、错误、事件、Tool trait | 已有 |
-| `cow-bus` | 事件总线与订阅 | 已有 |
-| `cow-tools` | 工具注册与沙箱后端 | 已有（subprocess） |
-| `cow-llm` | 模型 Provider 与类型 | 已有（OpenAI 兼容 + Mock） |
-| `cow-agent` | Agent 运行循环与 Crew 编排 | 已有（Sequential） |
-| `cow-cli` | `cowai` CLI | 已有 |
-| `cow-store` | 持久化抽象与 SQLite/Postgres 实现 | 规划 |
-| `cow-server` | HTTP/WebSocket API、认证、多用户 | 规划 |
-| `cow-client` | 本地/远程统一客户端抽象 | 规划 |
-| `cow-package` | `.cowpkg` / `.cowtemplate` 导入导出 | 规划 |
-| `cow-desktop` | Tauri 桌面壳与前端集成 | 规划 |
-| 前端应用 | React + TypeScript（频道、任务、审批、Agent 管理 UI） | 规划 |
+| `cow-core` | Domain model, errors, events, `Tool` trait | Existing |
+| `cow-bus` | Event bus and subscriptions | Existing |
+| `cow-tools` | Tool registry and sandbox backends | Existing (subprocess) |
+| `cow-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
+| `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
+| `cow-cli` | `cowai` CLI | Existing |
+| `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Planned |
+| `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
+| `cow-client` | Unified local/remote client abstraction | Planned |
+| `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
+| `cow-desktop` | Tauri shell and frontend integration | Planned |
+| Frontend app | React + TypeScript (channels, tasks, approvals, agent management UI) | Planned |
 
 ---
 
-## 7. 权限与审批模型
+## 7. Permissions and Approval Model
 
-- **工作区角色**：Owner（全部权限）、Admin（成员/Agent/策略管理）、Member（使用频道与任务）。
-- **Agent 权限**：可使用的工具集、可用模型、是否允许委派、最大迭代次数。
-- **审批决策**：记录审批人、时间、模式、规则依据，进入审计日志。
-- **敏感操作**：文件写入/删除、命令执行、网络访问、跨工作区访问。
-
----
-
-## 8. 非功能需求
-
-- **安全**：默认拒绝危险操作；凭证加密存储；最小权限；审计可追溯。
-- **性能**：本地模式冷启动 < 2s；频道消息实时推送；任务事件低延迟。
-- **可靠性**：任务崩溃可恢复；SQLite 写入事务化；服务端可水平扩展（P1）。
-- **可扩展**：工具、模型、模板、接入方式均通过接口扩展。
-- **可观测**：结构化日志、任务/运行追踪、成本统计（P1）。
-- **国际化**：UI 文案可本地化（至少中英文）。
+- **Workspace roles**: Owner (full control), Admin (members/agents/policy management), Member (channels and tasks).
+- **Agent permissions**: allowed tool set, allowed models, delegation flag, maximum iterations.
+- **Approval decisions**: record approver, time, mode, and rule basis in the audit log.
+- **Sensitive operations**: file writes/deletes, command execution, network access, cross-workspace access.
 
 ---
 
-## 9. 已确认决策与待确认问题
+## 8. Non-Functional Requirements
 
-### 9.1 已确认（2026-11-03）
+- **Security**: deny risky operations by default; encrypt credentials at rest; least privilege; auditable actions.
+- **Performance**: local-mode cold start < 2s; real-time channel messages; low-latency task events.
+- **Reliability**: recoverable task crashes; transactional SQLite writes; horizontally scalable server (P1).
+- **Extensibility**: tools, models, templates, and access methods all extend through interfaces.
+- **Observability**: structured logs, task/run tracing, cost accounting (P1).
+- **Internationalization**: UI strings localizable (at least English and Chinese).
 
-1. **编排范围**：v1 为单 Agent + 顺序 Crew；层级 Manager 与 DAG 放 P1。
-2. **记忆范围**：v1 为会话 + 频道/任务历史；项目级长期记忆放 P1。
-3. **前端技术**：React + TypeScript（Tauri WebView）。
-4. **本地/团队模式**：数据独立，导入/导出为主，不做双向同步。
-5. **模板**：JSON 定义，内置模板编译进二进制，用户模板可导入/导出 `.cowtemplate`；v1 无在线市场。
-6. **风险判定**：静态规则优先（ReadOnly–Critical），可选 LLM 分类器仅上调风险；无法判定按 High 处理。
-7. **导入/导出**：`.cowpkg`（ZIP + manifest + JSON/JSONL），不包含密钥、密码哈希与 Token。
-8. **认证**：本地账号 + Argon2id + 不透明会话 Token + API Token；OIDC/SSO 放 P1。
-9. **PostgreSQL**：推迟到服务端阶段；先完成本地/离线功能。
+---
 
-### 9.2 待确认
+## 9. Confirmed Decisions and Open Questions
 
-1. 数据静态加密方案。
-2. 在线模板市场与模板签名机制（P2）。
-3. TLS 终止与反向代理部署细节。
-4. 邀请与通知渠道（邮件 / IM）。
+### 9.1 Confirmed (2026-11-03)
+
+1. **Orchestration scope**: v1 = single agent + sequential crew; hierarchical manager and DAG are P1.
+2. **Memory scope**: v1 = session + channel/task history; project-level long-term memory is P1.
+3. **Frontend stack**: React + TypeScript (Tauri WebView).
+4. **Local/team modes**: independent data, import/export only, no bidirectional sync.
+5. **Templates**: JSON, built-in templates compiled into the binary, user templates import/export as `.cowtemplate`; no online marketplace in v1.
+6. **Risk determination**: static-rule-first (ReadOnly–Critical), optional LLM classifier can only raise risk; unknown operations default to High.
+7. **Import/export**: `.cowpkg` (ZIP + manifest + JSON/JSONL); no secrets, password hashes, or tokens.
+8. **Authentication**: local accounts + Argon2id + opaque session tokens + API tokens; OIDC/SSO is P1.
+9. **PostgreSQL**: deferred to the server phase; local/offline functionality comes first.
+
+### 9.2 Open Questions
+
+1. Data-at-rest encryption design.
+2. Online template marketplace and template signing (P2).
+3. TLS termination and reverse-proxy deployment details.
+4. Invitation and notification channels (email / IM).

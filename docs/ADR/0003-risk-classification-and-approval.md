@@ -1,47 +1,47 @@
-# ADR 0003：风险操作判定与审批策略
+# ADR 0003: Risk Classification and Approval Policy
 
-- **状态**：Accepted
-- **日期**：2026-11-03
-- **关联**：`docs/PRD.md` §5.1、`docs/ARCHITECTURE.md` §4.2
+- **Status**: Accepted
+- **Date**: 2026-11-03
+- **Related**: `docs/PRD.md` §5.1, `docs/ARCHITECTURE.md` §4.2
 
-## 背景
+## Context
 
-CowAI 提供多档审批模式（Ask / SafeAuto / PlanOnly / Trusted），并允许 Agent 执行命令与修改文件。风险判定必须确定、可审计、可配置，不能把安全边界完全交给 LLM 判断。
+CowAI offers multiple approval modes (Ask / SafeAuto / PlanOnly / Trusted) and lets agents execute commands and modify files. Risk classification must be deterministic, auditable, and configurable; the safety boundary cannot be handed entirely to an LLM.
 
-## 决策
+## Decision
 
-1. **静态规则优先**：根据工具类型、命令模式、路径范围、网络访问、破坏性操作与敏感数据访问，将操作分为五个风险等级：
-   - `ReadOnly`：只读查询、列表、读取；
-   - `Low`：工作区内可逆写入、格式化；
-   - `Medium`：执行普通命令、安装依赖、修改配置；
-   - `High`：删除、强制推送、访问工作区外路径、网络下载并执行；
-   - `Critical`：系统级破坏、凭据外泄、绕过沙箱、批量不可逆操作。
-2. **规则来源与优先级**：内置默认规则 + 工作区自定义 allow/deny；优先级为 **工作区策略 > Agent 策略 > 全局默认**。
-3. **可选 LLM 分类器**：仅用于静态规则未命中的操作，给出风险建议；分类器**只能上调风险等级，不能低于静态规则的下限**。默认关闭，工作区可启用（优先使用本地模型）。
-4. **审批模式**：
-   - `Ask`（默认）：Medium 及以上逐次询问，可批准一次、本会话或始终；
-   - `SafeAuto`：ReadOnly/Low 自动放行，Medium 及以上询问；
-   - `PlanOnly`：只允许 ReadOnly，写操作直接拒绝；
-   - `Trusted`：除 Critical 外自动放行；Critical 仍需管理员显式开启白名单。
-5. **无法判定时按 High 处理**（fail-safe），而不是默认放行。
-6. **审计**：每次决策记录来源（规则 ID / LLM 分类器 / 人工）、审批人、时间与操作参数。
+1. **Static rules first**: classify operations into five risk levels based on tool type, command pattern, path scope, network access, destructive operations, and sensitive data access:
+   - `ReadOnly`: read-only queries, listings, reads;
+   - `Low`: reversible writes inside the workspace, formatting;
+   - `Medium`: ordinary command execution, dependency installs, config changes;
+   - `High`: deletion, force-push, paths outside the workspace, download-and-execute;
+   - `Critical`: system-level damage, credential exfiltration, sandbox bypass, bulk irreversible operations.
+2. **Rule sources and priority**: built-in defaults plus workspace-specific allow/deny rules; priority is **workspace policy > agent policy > global default**.
+3. **Optional LLM classifier**: only for operations unmatched by static rules, returning a risk suggestion. The classifier **may only raise the risk level, never lower the static floor**. Disabled by default; workspaces may enable it (preferring local models).
+4. **Approval modes**:
+   - `Ask` (default): Medium and above require per-call approval; approve once, for this session, or always;
+   - `SafeAuto`: ReadOnly/Low auto-approve; Medium and above require approval;
+   - `PlanOnly`: only ReadOnly allowed; writes are rejected;
+   - `Trusted`: all but Critical auto-approve; Critical still requires an admin-enabled allowlist.
+5. **Undecidable operations default to High** (fail-safe), never auto-approve.
+6. **Audit**: record the decision source (rule ID / LLM classifier / human), approver, timestamp, and operation arguments.
 
-## 理由
+## Rationale
 
-- 静态规则确定、低延迟、可解释，适合作为安全边界；
-- LLM 分类器可处理长尾命令，但只作为"提高警惕"的补充，避免模型误判导致越权；
-- 多档模式兼顾效率与安全，用户可按工作区信任级别选择；
-- 完整审计满足自托管团队的可追溯需求。
+- Static rules are deterministic, low-latency, and explainable, making them suitable as the safety boundary;
+- An LLM classifier handles long-tail commands but only as a "raise caution" supplement, avoiding model misjudgment that could grant excessive permissions;
+- Multiple modes balance efficiency and safety across workspace trust levels;
+- Full auditing satisfies the traceability needs of self-hosted teams.
 
-## 后果
+## Consequences
 
-- 需要维护规则库与命令解析器（跨平台 shell 差异需测试）；
-- LLM 分类器会引入模型调用成本与延迟，默认关闭；
-- 规则误报可能增加审批负担，需要可配置白名单与"始终允许"；
-- 风险等级与审批模式的映射需要 UI 清晰呈现。
+- A rule library and command parser must be maintained (cross-platform shell differences need testing);
+- The LLM classifier adds cost and latency and is disabled by default;
+- False positives may increase approval burden; configurable allowlists and "always allow" are required;
+- The mapping between risk levels and approval modes must be clear in the UI.
 
-## 备选方案
+## Alternatives
 
-- **纯 LLM 分类**：灵活但不确定、可被提示注入影响，不作为主判定。
-- **纯静态规则**：确定但难以覆盖长尾命令，体验较差。
-- **按工具整体分级**：实现简单，但同一工具的不同参数风险差异很大（如读取 vs 删除）。
+- **LLM-only classification**: flexible but non-deterministic and vulnerable to prompt injection; not the primary decision maker.
+- **Static rules only**: deterministic but poor at covering long-tail commands, hurting UX.
+- **Per-tool grading**: simple, but risk varies widely within one tool (read vs. delete).

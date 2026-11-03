@@ -1,207 +1,207 @@
-# CowAI 产品需求文档（PRD）
+# CowAI Product Requirements Document (PRD)
 
-> **状态**：Draft v0.1
-> **日期**：2026-11-03
-> **范围**：本文档定义产品定位、目标用户、核心场景与 MVP 功能范围。功能架构与技术架构见 `docs/ARCHITECTURE.md`，决策记录见 `docs/ADR/`。
-
----
-
-## 1. 背景与问题
-
-当前 AI Agent 产品大致分为三类，各自存在明显缺口：
-
-1. **单 Agent 编码工具**（如终端 AI 助手）：个人效率高，但只有一个 Agent，无法形成角色分工与协作流程。
-2. **多 Agent 编排框架**（如 CrewAI、LangGraph）：能力强，但以代码为中心，缺少面向人的协作界面、审批与审计。
-3. **团队协作工具**（如 Mattermost、Slack）：有频道、线程与人的协作，但没有 Agent 作为一等成员。
-
-同时，越来越多个人开发者与小团队希望：
-
-- 在自己的机器或私有服务器上运行 AI 团队，数据不出内网；
-- 自由选择模型（云 API 或本地模型）；
-- 让多个 Agent 像同事一样分工协作，而不是把它们当成一次性调用的函数；
-- 从软件开发起步，但未来能扩展到调研、文档、数据分析等通用工作。
-
-CowAI 要填补的正是这个空白：**一个可自托管、以频道为协作界面的多 Agent 团队平台。**
+> **Status**: Draft v0.1
+> **Date**: 2026-11-03
+> **Scope**: This document defines the product positioning, target users, core scenarios, and MVP scope. Functional and system architecture live in `docs/ARCHITECTURE.md`; decisions are recorded in `docs/ADR/`.
 
 ---
 
-## 2. 产品定位
+## 1. Background and Problem
 
-### 2.1 一句话定位
+Today's AI agent products fall into three broad categories, each with a clear gap:
 
-> CowAI 是一个可自托管、以频道为协作界面的多 Agent 团队平台，让个人和小团队像带团队一样指挥自己的 AI 同事——从软件开发开始，但不局限于软件工程。
+1. **Single-agent coding tools** (e.g., terminal AI assistants): great for individual productivity, but there is only one agent, so role division and collaborative workflows never emerge.
+2. **Multi-agent orchestration frameworks** (e.g., CrewAI, LangGraph): powerful, but code-centric, with no human-facing collaboration surface, approvals, or audit trail.
+3. **Team collaboration tools** (e.g., Mattermost, Slack): channels, threads, and human collaboration, but agents are not first-class members.
 
-### 2.2 目标用户
+At the same time, more individual developers and small teams want to:
 
-| 优先级 | 用户 | 典型诉求 |
+- run an AI team on their own machine or private server, with data staying inside their network;
+- choose models freely (cloud APIs or local models);
+- have multiple agents collaborate like colleagues rather than calling them as one-shot functions;
+- start with software development, but later extend to research, writing, data analysis, and other general work.
+
+CowAI fills exactly this gap: **a self-hosted, channel-native multi-agent team platform.**
+
+---
+
+## 2. Product Positioning
+
+### 2.1 One-Sentence Positioning
+
+> CowAI is a self-hosted, channel-native multi-agent team platform that lets individuals and small teams direct their AI colleagues the way they would lead a team — starting with software development, but not limited to it.
+
+### 2.2 Target Users
+
+| Priority | User | Typical Need |
 | --- | --- | --- |
-| **主要** | 个人开发者、技术负责人、独立创作者 | 在自己的机器/私有服务器上搭建一支可定制的 AI 开发团队，掌控数据与模型 |
-| **次要** | 3–20 人小型技术团队 | 共享 Agent、任务与频道，形成可审计的人机协作流程 |
-| **扩展** | 通用知识工作者 | 通过自定义角色、工具与频道，把同一平台用于调研、文档、数据分析等非编码工作 |
+| **Primary** | Individual developers, tech leads, independent creators | Build a customizable AI development team on their own machine or private server, with control over data and models |
+| **Secondary** | Small technical teams (3–20 people) | Share agents, tasks, and channels, with an auditable human-AI collaboration process |
+| **Expansion** | General knowledge workers | Reuse the same platform for research, writing, data analysis, and other non-coding work through custom roles, tools, and channels |
 
-**关键约束**：平台不能把软件工程写死。角色、工具、工作流与频道都应是可配置的，软件工程只是首批内置模板与最佳实践。
+**Key constraint**: the platform must not hard-code software engineering. Roles, tools, workflows, and channels must all be configurable; software engineering is only the first set of built-in templates and best practices.
 
-**多用户**：v1 从第一版起就按多用户设计。即使桌面端以本地单用户模式运行，账号、工作区成员与权限模型也必须从一开始存在，避免后续重构。
+**Multi-user by design**: v1 is designed for multiple users from the first release. Even when the desktop app runs in local single-user mode, accounts, workspace membership, and permissions must exist from the start to avoid a later rewrite.
 
-### 2.3 核心场景
+### 2.3 Core Scenarios
 
-1. **个人搭建 AI 开发团队**
-   一个人配置规划、编码、评审等角色，让它们在频道中分工完成需求拆解、编码、测试与评审。
+1. **An individual builds an AI development team**
+   One person configures planner, coder, and reviewer roles, and lets them split requirement breakdown, coding, testing, and review work inside a channel.
 
-2. **频道内人机协作**
-   人类与多个 Agent 在同一频道/线程中共享上下文，通过 @提及、任务卡片、审批请求进行协作。
+2. **Human-AI collaboration in channels**
+   Humans and multiple agents share context in the same channel or thread, coordinating through @mentions, task cards, and approval requests.
 
-3. **通用工作扩展（不预设场景）**
-   平台只提供工作区、频道、Agent、任务、工具等通用原语；具体场景由用户通过自定义角色、工具与模板自由组合，不内置固定流程。
+3. **General work expansion (no fixed scenarios)**
+   The platform provides only generic primitives: workspaces, channels, agents, tasks, and tools. Users compose their own scenarios through custom roles, tools, and templates; no fixed workflow is built in.
 
-### 2.4 价值主张
+### 2.4 Value Proposition
 
-- **像同事一样协作，而不是像工具一样调用**：频道、线程、任务与审批是一等公民。
-- **自托管，数据自主**：单机或私有网络部署，数据留在自己的基础设施内。
-- **模型中立**：兼容 OpenAI 接口的云模型与本地模型，按任务选择。
-- **执行可验证**：Agent 的代码在沙箱中真实运行，结果可检查。
-- **开放可扩展**：Agent 角色、工具、流程与接入方式均可扩展。
+- **Collaborate like colleagues, not like tools**: channels, threads, tasks, and approvals are first-class.
+- **Self-hosted, data-sovereign**: deploy on a workstation or private network; data stays on your infrastructure.
+- **Model-neutral**: works with OpenAI-compatible cloud models and local models, chosen per task.
+- **Verifiable execution**: agent code runs for real in a sandbox, and results are inspectable.
+- **Open and extensible**: agent roles, tools, workflows, and access methods are all extensible.
 
-### 2.5 差异化定位：频道式人机协作
+### 2.5 Differentiation: Channel-Native Human-AI Collaboration
 
-CowAI 的核心差异化不是"更强的单体 Agent"，而是**把多个 Agent 和人类放进同一个协作空间**：
+CowAI's core differentiation is not "a stronger single agent", but **putting multiple agents and humans in the same collaboration space**:
 
-- 频道与线程是主要交互界面，人类和 Agent 都是频道成员；
-- Agent 可被 @ 指派，也可按角色主动认领任务；
-- 任务、思考过程、工具调用、审批与交付物都沉淀在频道时间线中，可追溯、可审计；
-- 人类可以随时介入、纠偏、批准或接管；
-- 协作上下文在频道内共享，而不是散落在各自的会话里。
+- Channels and threads are the primary interface; humans and agents are both channel members.
+- Agents can be assigned via @mention or proactively claim tasks by role.
+- Tasks, reasoning, tool calls, approvals, and deliverables all live in the channel timeline, traceable and auditable.
+- Humans can step in at any time to correct, approve, or take over.
+- Collaboration context is shared within the channel instead of being scattered across separate sessions.
 
-### 2.6 非目标（v1 明确不做）
+### 2.6 Non-Goals (Explicitly Out of Scope for v1)
 
-- 不做公有云多租户 SaaS；
-- 不做无代码通用工作流搭建器；
-- 不做只服务软件工程的封闭工具；
-- 不替代完整 IM / 办公套件；
-- 不追求一次性支持所有模型与工具生态。
+- Public multi-tenant SaaS.
+- A no-code general workflow builder.
+- A closed tool that only serves software engineering.
+- A replacement for a full IM or office suite.
+- Supporting every model and tool ecosystem at once.
 
-### 2.7 部署与运行形态
+### 2.7 Deployment and Runtime Forms
 
-CowAI 采用"同一核心、两种形态"：
+CowAI follows a "single core, two forms" model:
 
-| 形态 | 说明 | 适用场景 |
+| Form | Description | Best For |
 | --- | --- | --- |
-| 桌面应用（主入口） | Tauri 桌面壳，内置核心与本地 SQLite；默认离线单机使用，也可切换到远程团队服务器 | 个人开发者、日常使用 |
-| 自托管服务器 | 无头服务 + HTTP/WebSocket API；支持 Docker 与单二进制部署 | 小团队、企业内网、多用户协作 |
+| Desktop app (primary entry) | Tauri shell with an embedded core and local SQLite; offline single-machine use by default, with an option to connect to a remote team server | Individual developers, daily use |
+| Self-hosted server | Headless service with HTTP/WebSocket APIs; Docker and single-binary deployment | Small teams, enterprise intranets, multi-user collaboration |
 
-- 桌面端默认运行在**本地模式**（无需服务端），需要多人协作时连接**团队模式**服务器；
-- 服务端从 v1 起支持多用户、工作区成员与角色权限；
-- 桌面端与服务端共享同一套 Rust 核心库、领域模型与 API 契约。
-
----
-
-## 3. 用户画像
-
-### 3.1 主用户画像：独立技术负责人
-
-- 有 5 年以上开发经验，熟悉命令行、Docker 与 API Key 配置；
-- 有自己的服务器或高性能工作站；
-- 希望用 AI 承担重复性工程工作，但要求过程可控、结果可验证；
-- 关心隐私与成本，倾向自托管与本地模型。
-
-### 3.2 次要画像：小型技术团队
-
-- 3–20 人，使用私有部署或内网服务；
-- 需要共享 Agent 配置、任务看板与协作记录；
-- 关注权限、审计与知识沉淀。
-
-### 3.3 扩展画像：通用知识工作者
-
-- 不写代码，但希望配置自己的 Agent 完成调研、写作、数据整理；
-- 需要低门槛的角色/工具配置与清晰的频道交互。
+- The desktop app runs in **local mode** by default (no server needed) and can connect to a server in **team mode** for multi-user collaboration.
+- The server supports multiple users, workspace membership, and role-based permissions from v1.
+- Desktop and server share the same Rust core libraries, domain model, and API contract.
 
 ---
 
-## 4. 核心用户故事
+## 3. User Personas
 
-1. 作为个人开发者，我希望在私有服务器上一键部署 CowAI，并在 Web 控制台创建我的第一个工作区。
-2. 作为技术负责人，我希望创建"规划者 / 编码者 / 评审者"三个 Agent，并为它们配置模型与工具。
-3. 作为用户，我希望在一个频道里向 Agent 团队下达需求，并看到任务被拆解、分配与执行。
-4. 作为用户，我希望 Agent 在执行危险操作（如删除文件、运行未知命令）前请求我的批准。
-5. 作为用户，我希望 Agent 在沙箱中运行代码与测试，并把结果附在任务交付物中。
-6. 作为用户，我希望把同一平台用于非编码工作，例如让 Agent 调研资料并输出报告。
-7. 作为团队管理员，我希望查看频道内的任务历史、工具调用与审批记录。
+### 3.1 Primary Persona: Independent Tech Lead
+
+- 5+ years of development experience; comfortable with the command line, Docker, and API keys.
+- Owns a server or a high-performance workstation.
+- Wants AI to take over repetitive engineering work, with controllable processes and verifiable results.
+- Cares about privacy and cost; prefers self-hosting and local models.
+
+### 3.2 Secondary Persona: Small Technical Team
+
+- 3–20 people using a private deployment or intranet service.
+- Needs shared agent configurations, task visibility, and collaboration records.
+- Cares about permissions, auditability, and knowledge retention.
+
+### 3.3 Expansion Persona: General Knowledge Worker
+
+- Does not write code, but wants to configure agents for research, writing, and data organization.
+- Needs low-friction role/tool configuration and clear channel interactions.
 
 ---
 
-## 5. MVP 功能范围
+## 4. Core User Stories
 
-### 5.1 P0（首个可用版本）
+1. As an individual developer, I want to deploy CowAI on a private server in one step and create my first workspace in the desktop console.
+2. As a tech lead, I want to create planner / coder / reviewer agents and configure their models and tools.
+3. As a user, I want to submit a requirement to the agent team in a channel and see it broken down, assigned, and executed.
+4. As a user, I want agents to ask for my approval before risky operations such as deleting files or running unknown commands.
+5. As a user, I want agents to run code and tests in a sandbox and attach the results to the task deliverable.
+6. As a user, I want to use the same platform for non-coding work, such as having an agent research a topic and produce a report.
+7. As a team administrator, I want to review task history, tool calls, and approval records within a channel.
 
-| 功能域 | 内容 |
+---
+
+## 5. MVP Scope
+
+### 5.1 P0 (First Usable Release)
+
+| Area | Content |
 | --- | --- |
-| 运行形态 | 桌面应用（Tauri，本地模式）+ 自托管服务器（Docker/单二进制，团队模式） |
-| 多用户与权限 | 账号注册/登录、工作区成员、管理员/成员角色、API Token；桌面与服务端共用同一账号模型 |
-| Agent 模板库 | 内置 JSON 角色/团队模板（编译进软件），支持自定义、`.cowtemplate` 导入导出 |
-| 协作空间 | 工作区、频道、线程、消息时间线；@Agent 指派；任务卡片与审批卡片 |
-| Agent 管理 | 创建/编辑 Agent（角色、目标、背景、模型、工具、迭代上限） |
-| 任务与编排 | 任务创建、分配、顺序 Crew 执行、交付物与状态流转 |
-| 工具与沙箱 | 代码执行、文件读写；超时、输出截断、工作目录限制 |
-| 审批策略 | 多档模式（Ask / SafeAuto / PlanOnly / Trusted）；静态规则分级（ReadOnly–Critical），可选 LLM 分类器仅上调风险；支持工具/命令/路径白名单 |
-| 模型配置 | OpenAI 兼容端点（云 API 与本地模型），连接测试 |
-| 持久化 | SQLite（WAL）存储工作区、频道、消息、任务、Agent 配置与审批记录 |
-| CLI | `cowai` 保留，用于初始化、诊断、无头运行与调试 |
+| Runtime forms | Desktop app (Tauri, local mode) + self-hosted server (Docker/single binary, team mode) |
+| Multi-user and permissions | Sign-up/sign-in, workspace membership, admin/member roles, API tokens; desktop and server share one account model |
+| Agent template library | Built-in JSON role/team templates compiled into the app; custom templates and `.cowtemplate` import/export |
+| Collaboration space | Workspaces, channels, threads, message timeline; @Agent assignment; task cards and approval cards |
+| Agent management | Create/edit agents (role, goal, backstory, model, tools, iteration limit) |
+| Tasks and orchestration | Task creation, assignment, sequential crew execution, deliverables, and status transitions |
+| Tools and sandbox | Code execution, file read/write; timeouts, output truncation, working-directory limits |
+| Approval policy | Modes (Ask / SafeAuto / PlanOnly / Trusted); static risk levels (ReadOnly–Critical); optional LLM classifier that can only raise risk; tool/command/path allowlists |
+| Model configuration | OpenAI-compatible endpoints (cloud APIs and local models), connection test |
+| Persistence | SQLite (WAL) for workspaces, channels, messages, tasks, agent configuration, and approval records |
+| CLI | `cowai` retained for initialization, diagnostics, headless runs, and debugging |
 
-### 5.2 P1（增强）
+### 5.2 P1 (Enhancements)
 
-- 层级编排（Manager Agent 委派）与 DAG 工作流；
-- OIDC/SSO 与企业目录集成、更细粒度权限；
-- PostgreSQL 存储后端；
-- 可选的浏览器访问入口；
-- Docker 沙箱后端；
-- Webhook 与 Mattermost / Slack / 飞书集成；
-- Agent 长期记忆与知识库；
-- 流式响应、重试、限流与 Token/成本统计；
-- 审计日志与操作回溯。
+- Hierarchical orchestration (manager agent delegation) and DAG workflows.
+- OIDC/SSO and enterprise directory integration; finer-grained permissions.
+- PostgreSQL storage backend.
+- Optional browser access.
+- Docker sandbox backend.
+- Webhooks and Mattermost / Slack / Feishu integrations.
+- Long-term agent memory and knowledge base.
+- Streaming responses, retries, rate limiting, and token/cost accounting.
+- Audit log and operation replay.
 
-### 5.3 P2（生态）
+### 5.3 P2 (Ecosystem)
 
-- 插件机制与 MCP 兼容；
-- Agent / 流程模板市场；
-- WASM 轻量沙箱；
-- 多工作区与组织级管理；
-- 移动端或桌面客户端。
-
----
-
-## 6. 成功指标
-
-- **上手效率**：从部署到首个 Agent 团队跑通任务 < 30 分钟；
-- **任务效果**：任务交付成功率、人工干预率、返工率；
-- **协作活跃度**：频道消息数、任务数、审批响应时长；
-- **稳定性**：自托管部署成功率、服务可用性；
-- **社区健康度**：GitHub Star、Issue 响应时长、贡献者数量。
+- Plugin mechanism and MCP compatibility.
+- Agent/workflow template marketplace.
+- Lightweight WASM sandbox.
+- Multi-workspace and organization-level management.
+- Mobile or additional desktop clients.
 
 ---
 
-## 7. 已确认决策与待定问题
+## 6. Success Metrics
 
-### 7.1 已确认（2026-11-03）
+- **Onboarding efficiency**: under 30 minutes from deployment to the first agent team completing a task.
+- **Task effectiveness**: task success rate, human intervention rate, rework rate.
+- **Collaboration activity**: channel messages, tasks created, approval response time.
+- **Stability**: self-hosted deployment success rate, service availability.
+- **Community health**: GitHub stars, issue response time, contributor count.
 
-1. v1 从第一版起按多用户设计。
-2. 桌面控制台形态：桌面壳（Tauri）。
-3. 部署：桌面应用（可选无服务端）+ 自托管服务器（Docker/单二进制）双形态。
-4. 通用工作不预设固定场景，只提供可配置原语与模板，保持高自由度。
-5. 审批提供多档策略（默认询问、自动批准安全操作、只读规划、可信放行），并支持细粒度规则。
-6. 内置 Agent 与团队模板库。
-7. v1 编排范围：单 Agent + 顺序 Crew；层级 Manager 与 DAG 放 P1。
-8. v1 记忆范围：会话 + 频道/任务历史；项目级长期记忆放 P1。
-9. 桌面前端技术栈：React + TypeScript。
-10. 本地模式与团队模式：数据独立，以导入/导出为主，不做双向同步。
-11. 模板：JSON 定义，内置模板编译进软件；用户模板可导入/导出为 `.cowtemplate`；v1 不做在线模板市场。
-12. 风险判定：静态规则优先（ReadOnly / Low / Medium / High / Critical），可选 LLM 分类器仅作"上调风险"的补充；无法判定按 High 处理。
-13. 导入/导出：`.cowpkg`（ZIP + manifest.json + JSON/JSONL），不包含密钥、密码哈希或 Token。
-14. 认证：本地账号 + Argon2id + 服务端不透明会话 Token + API Token；OIDC/SSO 放 P1。
-15. PostgreSQL 推迟到服务端阶段；先完成本地/离线功能。
+---
 
-### 7.2 待定
+## 7. Confirmed Decisions and Open Questions
 
-1. 数据静态加密方案。
-2. 在线模板市场与模板签名机制（P2）。
-3. TLS 终止与反向代理部署细节。
-4. 邀请与通知渠道（邮件 / IM）。
+### 7.1 Confirmed (2026-11-03)
+
+1. v1 is multi-user by design from the first release.
+2. Desktop console form factor: desktop shell (Tauri).
+3. Deployment: desktop app (optionally serverless) plus self-hosted server (Docker/single binary).
+4. General work has no fixed scenarios; only configurable primitives and templates are provided, preserving freedom.
+5. Approvals offer multiple modes (Ask by default, auto-approve safe operations, plan-only, trusted) with fine-grained rules.
+6. Built-in agent and team template library.
+7. v1 orchestration scope: single agent + sequential crew; hierarchical manager and DAG are P1.
+8. v1 memory scope: session plus channel/task history; project-level long-term memory is P1.
+9. Desktop frontend stack: React + TypeScript.
+10. Local and team modes keep separate data; migration is import/export only, with no bidirectional sync.
+11. Templates are JSON, with built-in templates compiled into the app; user templates import/export as `.cowtemplate`; no online marketplace in v1.
+12. Risk determination is static-rule-first (ReadOnly / Low / Medium / High / Critical); an optional LLM classifier may only raise risk; unknown operations default to High.
+13. Import/export uses `.cowpkg` (ZIP + manifest.json + JSON/JSONL) and never includes secrets, password hashes, or tokens.
+14. Authentication: local accounts + Argon2id + opaque server session tokens + API tokens; OIDC/SSO is P1.
+15. PostgreSQL is deferred to the server phase; local/offline functionality comes first.
+
+### 7.2 Open Questions
+
+1. Data-at-rest encryption design.
+2. Online template marketplace and template signing (P2).
+3. TLS termination and reverse-proxy deployment details.
+4. Invitation and notification channels (email / IM).

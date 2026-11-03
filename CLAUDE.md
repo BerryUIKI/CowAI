@@ -14,6 +14,21 @@ CowAI is an open-source, high-performance multi-agent collaboration platform wit
 - **Known gaps** (not yet designed/built): hierarchical orchestration, persistence (tasks/messages/agent memory), human-in-the-loop tool approval, isolated sandbox backends (Docker/WASM), REST/WebSocket/Web UI surface, config file support, streaming responses, retries/rate limiting/token accounting, and channel-based collaboration actually wired into the CLI.
 - **Documentation plan** (to be written with the user): `docs/PRD.md` (product requirements), `docs/ARCHITECTURE.md` (functional + system architecture), `docs/ADR/` (decision records), `docs/ROADMAP.md`.
 - **Commit style**: small, atomic commits; frequent pushes and small PRs.
+- **Language**: all repository artifacts — code, comments, docs, commit messages, and branch names — must be English; conversation with the user may be Chinese.
+- **Git workflow**: GitFlow with `main` as the release branch and `dev` as the integration branch (see below).
+
+## Git Workflow (GitFlow)
+
+- `main` — release-ready history only.
+- `dev` — integration branch for completed features; all feature work merges here first (the branch is `dev`, not `develop`).
+- `feature/<name>` — branched from `dev`, merged back into `dev` with `--no-ff`.
+- `release/<version>` — branched from `dev` when preparing a release, merged into both `main` and `dev`.
+- `hotfix/<name>` — branched from `main` for urgent fixes, merged into both `main` and `dev`.
+- Commit messages are small, atomic, and English; pull requests target `dev` unless they are release or hotfix PRs.
+
+## Language
+
+All repository artifacts — code, comments, documentation, commit messages, and branch names — must be written in English. Conversation with the user may be in Chinese; do not add mixed-language sections to docs.
 
 ## Workspace Architecture
 
