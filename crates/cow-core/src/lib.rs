@@ -21,5 +21,7 @@ pub use identity::{
 };
 pub use run::{Run, RunId, RunStatus, ToolCallRecord};
 pub use task::{Task, TaskId, TaskStatus};
-pub use template::{Template, TemplateKind};
+pub use template::{
+    AgentTemplate, TaskTemplate, Template, TemplateDocument, TemplateKind, TEMPLATE_SCHEMA_VERSION,
+};
 pub use tool::{Tool, ToolCall, ToolDefinition, ToolResult};
