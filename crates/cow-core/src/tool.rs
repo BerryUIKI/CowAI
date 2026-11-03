@@ -1,3 +1,4 @@
+use crate::agent::AgentId;
 use crate::error::CowError;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
@@ -64,4 +65,21 @@ pub trait Tool: Send + Sync {
     }
 
     async fn execute(&self, call: &ToolCall) -> Result<ToolResult, CowError>;
+}
+
+/// Result of checking a tool call against the approval policy.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ToolAuthorization {
+    Approved,
+    Denied { reason: String },
+}
+
+/// Gate consulted before a tool call executes.
+#[async_trait]
+pub trait ToolGate: Send + Sync {
+    async fn authorize(
+        &self,
+        agent_id: &AgentId,
+        call: &ToolCall,
+    ) -> Result<ToolAuthorization, CowError>;
 }
