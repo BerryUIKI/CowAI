@@ -1,5 +1,5 @@
 use crate::agent::AgentId;
-use crate::channel::{ChannelId, ChannelMessage};
+use crate::channel::{Channel, ChannelId, ChannelMessage};
 use crate::task::{Task, TaskId};
 use crate::tool::{ToolCall, ToolResult};
 use chrono::{DateTime, Utc};
@@ -12,6 +12,8 @@ use uuid::Uuid;
 pub enum EventPayload {
     /// A chat/collaboration message posted to a channel
     MessagePosted(ChannelMessage),
+    /// A new collaboration channel was created
+    ChannelCreated(Channel),
     /// A new task has been created
     TaskCreated(Task),
     /// A task has been assigned to a specific agent

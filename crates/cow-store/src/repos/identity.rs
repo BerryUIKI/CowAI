@@ -183,6 +183,17 @@ impl Store {
         row.map(UserRow::into_domain).transpose()
     }
 
+    pub async fn list_users(&self) -> CowResult<Vec<User>> {
+        let rows = sqlx::query_as::<_, UserRow>(
+            "SELECT id, name, email, password_hash, created_at
+             FROM users ORDER BY created_at",
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(db)?;
+        rows.into_iter().map(UserRow::into_domain).collect()
+    }
+
     pub async fn create_workspace(&self, workspace: &Workspace) -> CowResult<()> {
         sqlx::query("INSERT INTO workspaces (id, name, created_at) VALUES (?, ?, ?)")
             .bind(&workspace.id.0)
@@ -203,6 +214,16 @@ impl Store {
         .await
         .map_err(db)?;
         row.map(WorkspaceRow::into_domain).transpose()
+    }
+
+    pub async fn list_workspaces(&self) -> CowResult<Vec<Workspace>> {
+        let rows = sqlx::query_as::<_, WorkspaceRow>(
+            "SELECT id, name, created_at FROM workspaces ORDER BY created_at",
+        )
+        .fetch_all(self.pool())
+        .await
+        .map_err(db)?;
+        rows.into_iter().map(WorkspaceRow::into_domain).collect()
     }
 
     pub async fn add_member(&self, membership: &Membership) -> CowResult<()> {

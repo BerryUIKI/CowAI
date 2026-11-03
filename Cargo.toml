@@ -6,6 +6,7 @@ members = [
     "crates/cow-llm",
     "crates/cow-agent",
     "crates/cow-store",
+    "crates/cow-service",
     "crates/cow-cli",
 ]
 resolver = "2"
@@ -53,3 +54,4 @@ cow-tools = { path = "crates/cow-tools" }
 cow-llm = { path = "crates/cow-llm" }
 cow-agent = { path = "crates/cow-agent" }
 cow-store = { path = "crates/cow-store" }
+cow-service = { path = "crates/cow-service" }

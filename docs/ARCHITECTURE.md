@@ -65,6 +65,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Humans and agents are both channel members; messages are persisted and shown on a timeline.
 - `@Agent` mentions or task cards trigger tasks; agent reasoning, tool calls, approvals, and deliverables are written back to the channel.
 - Channels are the primary collaboration surface but do not restrict usage: users can create channels and threads freely.
+- `cow-service` provides the local bootstrap (idempotent owner and default workspace) and channel/message services that persist writes before publishing `ChannelCreated` and `MessagePosted` events.
 
 ### 3.3 Agents and Templates
 
@@ -187,6 +188,7 @@ Inspired by Claude Code's permission modes:
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cow-cli` | `cowai` CLI | Existing |
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
+| `cow-service` | Local bootstrap, channel/message services, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cow-client` | Unified local/remote client abstraction | Planned |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
