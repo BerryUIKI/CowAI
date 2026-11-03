@@ -18,6 +18,8 @@ CowAI is a modern, modular multi-agent platform designed for collaborative softw
   - Structured channels and threaded messages for human-in-the-loop supervision and agent collaboration.
 - **🛡️ Secure Code Sandbox**:
   - `cow-tools` includes a subprocess sandbox for executing code, running shell commands, and manipulating files with timeout protection and output truncation.
+- **🗄️ Local-First Persistence**:
+  - `cow-store` provides embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, approvals, and audit events.
 - **🔌 Pluggable LLM Providers**:
   - First-class support for OpenAI, DeepSeek, Ollama, OpenRouter, and any OpenAI-compatible API, plus local mock providers for deterministic testing.
 
@@ -30,12 +32,13 @@ CowAI/
 ├── Cargo.toml                  # Workspace root manifest
 ├── CLAUDE.md                   # AI developer guidelines
 ├── crates/
-│   ├── cow-core/             # Core domain models (Agent, Task, Channel, Tool, Event)
-│   ├── cow-bus/              # Tokio broadcast event bus and pub/sub routing
-│   ├── cow-tools/            # Code execution sandbox & filesystem tools
-│   ├── cow-llm/              # OpenAI-compatible & Mock LLM providers
-│   ├── cow-agent/            # Agent runtime loop & Crew orchestration
-│   └── cow-cli/              # Command-line interface (`cowai`)
+│   ├── cow-core/      # Core domain models (Agent, Task, Channel, Tool, Event)
+│   ├── cow-bus/       # Tokio broadcast event bus and pub/sub routing
+│   ├── cow-tools/     # Code execution sandbox & filesystem tools
+│   ├── cow-llm/       # OpenAI-compatible & Mock LLM providers
+│   ├── cow-agent/     # Agent runtime loop & Crew orchestration
+│   ├── cow-store/     # SQLite persistence, migrations, and repositories
+│   └── cow-cli/       # Command-line interface (`cowai`)
 ```
 
 ---

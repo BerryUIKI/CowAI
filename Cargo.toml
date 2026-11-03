@@ -5,6 +5,7 @@ members = [
     "crates/cow-tools",
     "crates/cow-llm",
     "crates/cow-agent",
+    "crates/cow-store",
     "crates/cow-cli",
 ]
 resolver = "2"
@@ -42,9 +43,13 @@ tempfile = "3.10"
 # HTTP client
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
+# Persistence
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
+
 # Internal workspace crates
 cow-core = { path = "crates/cow-core" }
 cow-bus = { path = "crates/cow-bus" }
 cow-tools = { path = "crates/cow-tools" }
 cow-llm = { path = "crates/cow-llm" }
 cow-agent = { path = "crates/cow-agent" }
+cow-store = { path = "crates/cow-store" }
