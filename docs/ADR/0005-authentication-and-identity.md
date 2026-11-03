@@ -1,41 +1,41 @@
-# ADR 0005：认证与身份模型
+# ADR 0005: Authentication and Identity Model
 
-- **状态**：Accepted
-- **日期**：2026-11-03
-- **关联**：`docs/PRD.md` §5.1、`docs/ARCHITECTURE.md` §3.1 / §7
+- **Status**: Accepted
+- **Date**: 2026-11-03
+- **Related**: `docs/PRD.md` §5.1, `docs/ARCHITECTURE.md` §3.1 / §7
 
-## 背景
+## Context
 
-v1 从第一版起按多用户设计；桌面本地模式需要零配置可用，自托管服务器需要安全的多用户认证。需要明确 v1 的认证方式、令牌模型与 OIDC/SSO 的优先级。
+v1 is multi-user from the first release. The desktop local mode must work with zero configuration, while the self-hosted server needs secure multi-user authentication. The v1 authentication methods, token model, and OIDC/SSO priority must be defined.
 
-## 决策
+## Decision
 
-1. **v1 本地账号**：邮箱/用户名 + 密码；密码使用 **Argon2id** 哈希；首个注册用户成为工作区 `Owner`。
-2. **会话令牌**：服务端生成不透明随机令牌，哈希后存库，可撤销；桌面端存入操作系统密钥链（Tauri keychain 插件），API 使用 `Bearer` 头。
-3. **API Token**：以 `cow_` 为前缀便于识别，绑定用户与工作区，支持作用域与撤销；数据库中只存哈希。
-4. **工作区角色**：`Owner` / `Admin` / `Member`；本地模式自动创建本地 Owner 与默认工作区，默认无密码，可选应用锁。
-5. **邀请**：一次性邀请令牌/链接，管理员手动分发；v1 不依赖邮件服务。
-6. **OIDC/SSO 为 P1**：认证层设计为可插拔 `AuthProvider`，便于企业目录接入。
-7. **传输安全**：服务端默认要求 HTTPS（由反向代理终止 TLS）；局域网/开发环境可通过显式 `--allow-insecure` 放行。
-8. **v1 基础防护**：登录失败限速与临时锁定；不做邮箱验证与自助找回密码，管理员可重置。
-9. **静态数据加密不在 v1**：依赖操作系统账户与磁盘加密；列为已知限制。
+1. **v1 local accounts**: email/username + password hashed with **Argon2id**; the first registered user becomes the workspace `Owner`.
+2. **Session tokens**: the server issues opaque random tokens, stores only hashes, and supports revocation; the desktop stores them in the OS keychain (Tauri keychain plugin); API clients use the `Bearer` header.
+3. **API tokens**: prefixed with `cow_` for identification, bound to a user and workspace, scoped and revocable; only hashes are stored.
+4. **Workspace roles**: `Owner` / `Admin` / `Member`. Local mode auto-creates a local Owner and a default workspace, with no password by default and an optional app lock.
+5. **Invitations**: single-use invite tokens/links, distributed manually by an administrator; v1 does not depend on an email service.
+6. **OIDC/SSO is P1**: the auth layer is designed around a pluggable `AuthProvider` for enterprise directory integration.
+7. **Transport security**: the server requires HTTPS by default (TLS terminated by a reverse proxy); LAN/development environments may opt in explicitly with `--allow-insecure`.
+8. **v1 baseline protection**: login failure rate limiting and temporary lockout; no email verification or self-service password reset, but administrators can reset passwords.
+9. **Data-at-rest encryption is not in v1**: it relies on OS accounts and disk encryption, and is recorded as a known limitation.
 
-## 理由
+## Rationale
 
-- 不透明会话令牌可即时撤销，避免 JWT 的密钥管理与吊销难题；
-- Argon2id 是当前推荐的密码哈希算法；
-- 本地模式无密码、团队模式强制认证，兼顾零配置与安全；
-- OIDC/SSO 放在服务端 MVP 之后，避免 v1 范围膨胀。
+- Opaque session tokens can be revoked immediately, avoiding JWT key management and revocation problems;
+- Argon2id is the current recommended password hashing algorithm;
+- Passwordless local mode and authenticated team mode combine zero configuration with security;
+- OIDC/SSO comes after the server MVP to avoid scope creep in v1.
 
-## 后果
+## Consequences
 
-- 需要实现会话存储、令牌哈希、限速与撤销逻辑；
-- 密码重置、邮件通知与 OIDC 接入需要后续里程碑；
-- 本地模式的数据安全依赖操作系统账户，UI 需明确提示；
-- 未来接入浏览器入口时，需要补充 Cookie/CSRF 策略。
+- Session storage, token hashing, rate limiting, and revocation logic must be implemented;
+- Password reset, email notifications, and OIDC integration are later milestones;
+- Local-mode data security depends on OS accounts, and the UI must make this clear;
+- A future browser entry point will require Cookie/CSRF policies.
 
-## 备选方案
+## Alternatives
 
-- **JWT**：无状态、易扩展，但撤销与密钥轮换复杂，不适合自托管起步。
-- **OAuth/OIDC 优先**：企业友好，但个人本地模式配置成本高。
-- **Basic Auth**：实现最简单，但安全性不足，不适合长期方案。
+- **JWT**: stateless and scalable, but revocation and key rotation are complex; not ideal for a self-hosted start.
+- **OAuth/OIDC first**: enterprise-friendly but high configuration cost for personal local mode.
+- **Basic Auth**: simplest to implement but insufficiently secure for a long-term solution.
