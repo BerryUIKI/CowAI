@@ -19,12 +19,13 @@ CowAI offers multiple approval modes (Ask / SafeAuto / PlanOnly / Trusted) and l
 2. **Rule sources and priority**: built-in defaults plus workspace-specific allow/deny rules; priority is **workspace policy > agent policy > global default**.
 3. **Optional LLM classifier**: only for operations unmatched by static rules, returning a risk suggestion. The classifier **may only raise the risk level, never lower the static floor**. Disabled by default; workspaces may enable it (preferring local models).
 4. **Approval modes**:
-   - `Ask` (default): Medium and above require per-call approval; approve once, for this session, or always;
-   - `SafeAuto`: ReadOnly/Low auto-approve; Medium and above require approval;
-   - `PlanOnly`: only ReadOnly allowed; writes are rejected;
-   - `Trusted`: all but Critical auto-approve; Critical still requires an admin-enabled allowlist.
+   - `Ask` (default): ReadOnly auto-approves; Low and above require per-call approval; Critical is denied;
+   - `SafeAuto`: ReadOnly/Low auto-approve; Medium and above require approval; Critical is denied;
+   - `PlanOnly`: only ReadOnly auto-approves; every write or execution is denied;
+   - `Trusted`: everything except Critical auto-approves; Critical is denied in v1 (a future explicit allowlist may permit it).
 5. **Undecidable operations default to High** (fail-safe), never auto-approve.
 6. **Audit**: record the decision source (rule ID / LLM classifier / human), approver, timestamp, and operation arguments.
+7. **Enforcement**: a `ToolGate` is consulted before every tool execution. `ApprovalService` classifies the call, applies the assignment's approval level, creates a pending approval when required, waits for the decision, and writes audit events. Delegated assignments inherit `inherit_approval_level(parent, requested)`, where `PlanOnly` is a hard read-only boundary and otherwise the more permissive level wins.
 
 ## Rationale
 

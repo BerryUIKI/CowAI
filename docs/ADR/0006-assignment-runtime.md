@@ -74,7 +74,7 @@ Adopted in Phase 1.4:
 - Assignment record, tree, lifecycle, event log, budgets, stall guard, restart reconciliation.
 - Sequential Crew implemented on top of assignments.
 - One wake path; no second orchestration mechanism.
-- Approval level stored on the assignment but enforcement and inheritance deferred to Phase 1.5.
+- Approval level stored on the assignment; enforcement and inheritance are delivered in Phase 1.5.
 
 Deferred:
 
