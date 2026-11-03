@@ -238,3 +238,9 @@ Inspired by Claude Code's permission modes:
 2. Online template marketplace and template signing (P2).
 3. TLS termination and reverse-proxy deployment details.
 4. Invitation and notification channels (email / IM).
+
+---
+
+## 10. Design References
+
+External projects and the patterns CowAI adopts, defers, or rejects are recorded in `docs/REFERENCES.md` (CrewAI, Mattermost, and OpenMausBot). The most immediate candidate is a simplified assignment runtime for Phase 1.4, described there.
