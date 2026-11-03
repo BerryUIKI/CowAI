@@ -1,0 +1,14 @@
+[package]
+name = "cow-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+cow-core = { workspace = true }
+cow-bus = { workspace = true }
+cow-store = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }

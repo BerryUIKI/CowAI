@@ -345,6 +345,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "cow-service"
+version = "0.1.0"
+dependencies = [
+ "cow-bus",
+ "cow-core",
+ "cow-store",
+ "tokio",
+]
+
+[[package]]
 name = "cow-store"
 version = "0.1.0"
 dependencies = [
