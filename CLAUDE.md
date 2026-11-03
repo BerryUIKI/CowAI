@@ -6,6 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 CowAI is an open-source, high-performance multi-agent collaboration platform with code execution and automation capabilities, built in Rust. It utilizes an event-driven message bus for decoupled multi-agent communication and modular tool sandboxing.
 
+## Project Status & Workflow
+
+**Current phase: functional architecture design and documentation.** Do not start new feature implementation until the design docs under `docs/` are agreed with the user. The agreed deliverable order is: align on functional architecture → write the documentation → continue development.
+
+- **Implemented baseline**: the workspace crates below, a working sequential agent crew, a local subprocess code sandbox, an OpenAI-compatible + mock LLM client, and the `cowai` CLI (`run`, `tools`). Tests, `clippy -D warnings`, and `cargo fmt --check` pass.
+- **Known gaps** (not yet designed/built): hierarchical orchestration, persistence (tasks/messages/agent memory), human-in-the-loop tool approval, isolated sandbox backends (Docker/WASM), REST/WebSocket/Web UI surface, config file support, streaming responses, retries/rate limiting/token accounting, and channel-based collaboration actually wired into the CLI.
+- **Documentation plan** (to be written with the user): `docs/PRD.md` (product requirements), `docs/ARCHITECTURE.md` (functional + system architecture), `docs/ADR/` (decision records), `docs/ROADMAP.md`.
+- **Commit style**: small, atomic commits; frequent pushes and small PRs.
+
 ## Workspace Architecture
 
 The project is structured as a Cargo workspace under `crates/`:
