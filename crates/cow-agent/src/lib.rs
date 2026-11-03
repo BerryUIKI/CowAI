@@ -9,11 +9,35 @@ pub use roles::StandardRoles;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use cow_bus::EventBus;
+    use cow_core::agent::AgentId;
+    use cow_core::error::CowError;
     use cow_core::task::Task;
-    use cow_llm::MockLlmProvider;
+    use cow_core::tool::{ToolAuthorization, ToolCall, ToolGate};
+    use cow_llm::{ChatCompletionResponse, LlmToolCall, MockLlmProvider};
     use cow_tools::{CodeExecutionTool, SubprocessSandbox, ToolRegistry};
+    use serde_json::json;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+
+    struct DenyGate {
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl ToolGate for DenyGate {
+        async fn authorize(
+            &self,
+            _agent_id: &AgentId,
+            _call: &ToolCall,
+        ) -> Result<ToolAuthorization, CowError> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
+            Ok(ToolAuthorization::Denied {
+                reason: "denied in test".to_string(),
+            })
+        }
+    }
 
     #[tokio::test]
     async fn test_crew_sequential_execution() {
@@ -56,5 +80,43 @@ mod tests {
         let results = crew.kickoff(&bus).await.unwrap();
         assert_eq!(results.len(), 2);
         assert!(results.contains_key(&task1_id));
+    }
+
+    #[tokio::test]
+    async fn tool_gate_can_deny_tool_calls() {
+        let bus = EventBus::default_bus();
+        let responses = vec![
+            ChatCompletionResponse {
+                content: Some("trying".to_string()),
+                tool_calls: vec![LlmToolCall {
+                    id: "call-1".to_string(),
+                    name: "execute_code".to_string(),
+                    arguments: json!({ "command": "echo hi" }),
+                }],
+                finish_reason: Some("tool_calls".to_string()),
+            },
+            ChatCompletionResponse {
+                content: Some("finished".to_string()),
+                tool_calls: Vec::new(),
+                finish_reason: Some("stop".to_string()),
+            },
+        ];
+        let llm = Arc::new(MockLlmProvider::new(responses));
+        let mut agent = AgentInstance::new(
+            StandardRoles::coder(),
+            llm,
+            ToolRegistry::new(),
+            "mock-model",
+        );
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        agent.set_tool_gate(Some(Arc::new(DenyGate {
+            calls: calls.clone(),
+        })));
+
+        let task = Task::new("Run a command", "Output");
+        let output = agent.execute_task(&task, &[], &bus).await.unwrap();
+        assert_eq!(output, "finished");
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
     }
 }

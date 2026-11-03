@@ -1,0 +1,230 @@
+use std::time::Duration;
+
+use cow_bus::EventBus;
+use cow_core::agent::AgentId;
+use cow_core::approval::{ApprovalLevel, ApprovalStatus};
+use cow_core::assignment::{
+    Assignment, AssignmentMode, AssignmentOrigin, AssignmentRequester, ReplyMode,
+};
+use cow_core::identity::WorkspaceId;
+use cow_core::risk::RiskLevel;
+use cow_core::tool::ToolAuthorization;
+use cow_core::tool::ToolCall;
+use cow_service::{bootstrap_local, decision_for, ApprovalDecision, ApprovalService};
+use cow_store::Store;
+use serde_json::json;
+
+async fn setup(
+    level: ApprovalLevel,
+    timeout: Duration,
+) -> (Store, ApprovalService, Assignment, AgentId, WorkspaceId) {
+    let store = Store::connect_in_memory().await.unwrap();
+    store.migrate().await.unwrap();
+    let context = bootstrap_local(&store).await.unwrap();
+    let agent = AgentId::new("agent-1");
+    let task =
+        cow_core::task::Task::new("Approval task", "An approved result").assign_to(agent.clone());
+    store
+        .create_task(&context.workspace.id, None, &task)
+        .await
+        .unwrap();
+
+    let assignment = Assignment::new_root(
+        task.id.clone(),
+        AssignmentOrigin::User,
+        AssignmentRequester::User(context.user.id.0.clone()),
+        agent.clone(),
+        AssignmentMode::Work,
+        ReplyMode::Resume,
+        level,
+    );
+    store.create_assignment(&assignment).await.unwrap();
+
+    let bus = EventBus::default_bus();
+    let service = ApprovalService::new(store.clone(), bus, context.workspace.id.clone())
+        .with_timeout(timeout);
+    (
+        store,
+        service,
+        assignment,
+        agent,
+        context.workspace.id.clone(),
+    )
+}
+
+fn call(name: &str, arguments: serde_json::Value) -> ToolCall {
+    ToolCall {
+        id: "call-1".to_string(),
+        name: name.to_string(),
+        arguments,
+    }
+}
+
+#[test]
+fn policy_decisions_are_distinct_per_mode() {
+    assert_eq!(
+        decision_for(ApprovalLevel::Ask, RiskLevel::ReadOnly),
+        ApprovalDecision::AutoApprove
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::Ask, RiskLevel::Low),
+        ApprovalDecision::RequireApproval
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::SafeAuto, RiskLevel::Low),
+        ApprovalDecision::AutoApprove
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::SafeAuto, RiskLevel::Medium),
+        ApprovalDecision::RequireApproval
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::PlanOnly, RiskLevel::Low),
+        ApprovalDecision::Deny
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::Trusted, RiskLevel::High),
+        ApprovalDecision::AutoApprove
+    );
+    assert_eq!(
+        decision_for(ApprovalLevel::Trusted, RiskLevel::Critical),
+        ApprovalDecision::Deny
+    );
+}
+
+#[tokio::test]
+async fn auto_approval_records_audit() {
+    let (store, service, assignment, agent, workspace_id) =
+        setup(ApprovalLevel::SafeAuto, Duration::from_secs(1)).await;
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call("read_file", json!({ "path": "src/main.rs" })),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorization, ToolAuthorization::Approved);
+
+    let events = store.list_audit_events(&workspace_id, 20).await.unwrap();
+    assert!(events
+        .iter()
+        .any(|event| event.action == "tool.auto_approved"));
+}
+
+#[tokio::test]
+async fn plan_only_denies_writes_and_records_audit() {
+    let (store, service, assignment, agent, workspace_id) =
+        setup(ApprovalLevel::PlanOnly, Duration::from_secs(1)).await;
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call(
+                "write_file",
+                json!({ "path": "src/main.rs", "content": "x" }),
+            ),
+        )
+        .await
+        .unwrap();
+    match authorization {
+        ToolAuthorization::Denied { reason } => assert!(reason.contains("denied")),
+        other => panic!("expected denied, got {other:?}"),
+    }
+
+    let events = store.list_audit_events(&workspace_id, 20).await.unwrap();
+    assert!(events.iter().any(|event| event.action == "tool.denied"));
+}
+
+#[tokio::test]
+async fn trusted_denies_critical_operations() {
+    let (_store, service, assignment, agent, _workspace_id) =
+        setup(ApprovalLevel::Trusted, Duration::from_secs(1)).await;
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call("execute_code", json!({ "command": "rm -rf /" })),
+        )
+        .await
+        .unwrap();
+    assert!(matches!(authorization, ToolAuthorization::Denied { .. }));
+}
+
+#[tokio::test]
+async fn pending_approval_is_approved_by_a_human() {
+    let (store, service, assignment, agent, workspace_id) =
+        setup(ApprovalLevel::Ask, Duration::from_secs(2)).await;
+    let task_id = assignment.task_id.clone();
+
+    let decider = service.clone();
+    let decide_store = store.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let pending = decide_store.list_pending_approvals(&task_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        decider
+            .decide(&pending[0].id, ApprovalStatus::Approved, "user-1")
+            .await
+            .unwrap();
+    });
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call("execute_code", json!({ "command": "echo hello" })),
+        )
+        .await
+        .unwrap();
+    assert_eq!(authorization, ToolAuthorization::Approved);
+
+    let pending = store
+        .list_pending_approvals(&assignment.task_id)
+        .await
+        .unwrap();
+    assert!(pending.is_empty());
+
+    let events = store.list_audit_events(&workspace_id, 50).await.unwrap();
+    assert!(events
+        .iter()
+        .any(|event| event.action == "tool.approval_requested"));
+    assert!(events
+        .iter()
+        .any(|event| event.action == "tool.approval_approved"));
+}
+
+#[tokio::test]
+async fn pending_approval_rejected_denies_the_tool() {
+    let (store, service, assignment, agent, _workspace_id) =
+        setup(ApprovalLevel::Ask, Duration::from_secs(2)).await;
+    let task_id = assignment.task_id.clone();
+
+    let decider = service.clone();
+    let decide_store = store.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let pending = decide_store.list_pending_approvals(&task_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        decider
+            .decide(&pending[0].id, ApprovalStatus::Rejected, "user-1")
+            .await
+            .unwrap();
+    });
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call("execute_code", json!({ "command": "echo hello" })),
+        )
+        .await
+        .unwrap();
+    match authorization {
+        ToolAuthorization::Denied { reason } => assert!(reason.contains("rejected")),
+        other => panic!("expected denied, got {other:?}"),
+    }
+}

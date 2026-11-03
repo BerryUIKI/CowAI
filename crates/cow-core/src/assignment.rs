@@ -9,6 +9,20 @@ use crate::task::TaskId;
 /// Maximum assignment tree depth allowed by the local runtime.
 pub const MAX_ASSIGNMENT_DEPTH: u32 = 8;
 
+/// Inherit an approval level for delegated work.
+///
+/// `PlanOnly` is treated as a hard read-only boundary and always wins.
+/// Otherwise the more permissive of the parent and requested levels wins.
+pub fn inherit_approval_level(parent: ApprovalLevel, requested: ApprovalLevel) -> ApprovalLevel {
+    use ApprovalLevel::{Ask, PlanOnly, SafeAuto, Trusted};
+    match (parent, requested) {
+        (PlanOnly, _) | (_, PlanOnly) => PlanOnly,
+        (Trusted, _) | (_, Trusted) => Trusted,
+        (SafeAuto, _) | (_, SafeAuto) => SafeAuto,
+        (Ask, Ask) => Ask,
+    }
+}
+
 /// Unique identifier for an assignment.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AssignmentId(pub String);

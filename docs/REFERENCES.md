@@ -57,7 +57,7 @@ OpenMausBot uses one record per delegated job, whatever started it (person, rout
 
 Lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes the row and its event in one transaction. Budgets (`requests`, `executions`, `wakes`) renew only on durable progress; two continuations without a successful tool call, or three identical errors, fail the node as stalled. Restart reconciliation reruns a cut turn at most once and never reruns a turn that already acted outward. Invariants include: no result delivered twice, one wake per result, and no "approved" without an allow.
 
-**CowAI recommendation (Phase 1.4)**: adopt a simplified assignment tree:
+**CowAI implementation (Phase 1.4)**: the simplified assignment tree is implemented:
 
 - Extend tasks with `root_id`, `parent_id`, `depth`, `origin`, `requester`, `mode`, `reply`, `status`, `executions`, `restarts`.
 - Persist an append-only `assignment_events` table; every state change is transactional.
@@ -71,7 +71,7 @@ This is more work than a flat sequential crew, but it prevents the rewrite that 
 
 OpenMausBot offers per-bot and per-thread levels: **Ask for approval**, **Auto-accept edits**, **Approve for me**, and **Full access**, plus a Codex-specific custom mode. Changes apply mid-turn where the engine allows it. Delegated work inherits the Chief's level under `level = max(own, inherited)`, capped by what the engine actually supports. A bot reading its own files never asks; everything else needs an explicit grant. Full access still does not bypass OS privacy, authentication, MFA, or workspace ownership. The decision log records who approved what.
 
-**CowAI recommendation (Phase 1.5)**: map CowAI's modes to this model:
+**CowAI implementation (Phase 1.5)**: approval levels are stored per assignment and inherited for delegated work (`inherit_approval_level`). The static risk classifier, approval service, and `ToolGate` enforcement are implemented. Saved exact-command grants and per-thread overrides remain future work.
 
 | CowAI mode | OpenMausBot analogue | Notes |
 | --- | --- | --- |
@@ -142,9 +142,9 @@ OpenMausBot treats bots as contacts, groups them into departments, gives each ch
 | --- | --- | --- | --- |
 | Role/goal/backstory agents, task dependencies | CrewAI | Done | Adopted |
 | Channels, threads, multi-user workspaces | Mattermost | In progress | Adopted |
-| Assignment tree, lifecycle, event log, budgets, restart | OpenMausBot | 1.4 | Adopt simplified |
-| Per-task approval overrides and inheritance | OpenMausBot | 1.5 | Adopt |
-| Static allowlists and own-workspace reads | OpenMausBot | 1.5 | Adopt |
+| Assignment tree, lifecycle, event log, budgets, restart | OpenMausBot | 1.4 | Adopted (simplified) |
+| Per-task approval overrides and inheritance | OpenMausBot | 1.5 | Adopted (assignment-level + inheritance) |
+| Static allowlists and own-workspace reads | OpenMausBot | 1.5 | Partially: static risk + policy; saved grants later |
 | Markdown project memory with budget and recall | OpenMausBot | P1 | Adopt |
 | Additive team sharing with safe defaults and redaction | OpenMausBot | 1.7 / P1 | Adopt |
 | Tool allow/exclude selectors and tool bridge | OpenMausBot | P1/P2 | Adopt later |

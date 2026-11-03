@@ -2,12 +2,14 @@ pub mod code_tool;
 pub mod executor;
 pub mod filesystem;
 pub mod registry;
+pub mod risk;
 pub mod sandbox;
 
 pub use code_tool::CodeExecutionTool;
 pub use executor::SubprocessSandbox;
 pub use filesystem::{ReadFileTool, WriteFileTool};
 pub use registry::ToolRegistry;
+pub use risk::{RiskAssessment, StaticRiskClassifier};
 pub use sandbox::{ExecutionResult, SandboxBackend};
 
 #[cfg(test)]

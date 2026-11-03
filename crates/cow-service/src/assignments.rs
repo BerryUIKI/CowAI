@@ -99,7 +99,7 @@ impl AssignmentService {
             assignee,
             AssignmentMode::Work,
             ReplyMode::Resume,
-            approval_level,
+            cow_core::assignment::inherit_approval_level(parent.approval_level, approval_level),
         );
         self.store.create_assignment(&child).await?;
         self.publish_task_created(task);

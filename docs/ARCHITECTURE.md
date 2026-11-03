@@ -91,6 +91,8 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Built-in tools: code execution, file read, file write; later: network access, retrieval, browser, and more.
 - `SandboxBackend`: local subprocess in v1; Docker in P1; WASM evaluated in P2.
 - Resource limits: timeout, output truncation, working-directory restriction, environment-variable filtering.
+- Static risk classifier (`StaticRiskClassifier`): grades every tool call as `ReadOnly`, `Low`, `Medium`, `High`, or `Critical` using deterministic rules; unknown tools default to `High`.
+- Approval gate: `ToolGate` is consulted before every tool execution. `cow-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events.
 
 ### 3.6 Model Gateway
 
@@ -136,13 +138,13 @@ Inspired by Claude Code's permission modes:
 
 | Mode | Behavior |
 | --- | --- |
-| **Ask (default)** | Every sensitive tool call requires approval; approve once, for this session, or always |
-| **SafeAuto** | Read-only/safe operations auto-approve; writes/executions still require approval |
-| **PlanOnly** | Agents may plan and investigate read-only, but cannot write |
-| **Trusted** | Auto-approve within a trusted workspace (admin-enabled), with auditing retained |
+| **Ask (default)** | ReadOnly auto-approves; Low and above require approval; Critical is denied |
+| **SafeAuto** | ReadOnly/Low auto-approve; Medium and above require approval; Critical is denied |
+| **PlanOnly** | Only ReadOnly is allowed; writes and executions are denied |
+| **Trusted** | Everything except Critical auto-approves; Critical remains denied in v1 |
 
 - Rule priority: workspace policy > agent policy > global default.
-- Assignment inheritance: delegated work uses `max(own, inherited)`; the effective level is stored on the assignment record (ADR-0006, enforced in Phase 1.5).
+- Assignment inheritance: delegated work uses `inherit_approval_level(parent, requested)`; `PlanOnly` is a hard read-only boundary, otherwise the more permissive level wins (ADR-0006, implemented in Phase 1.5).
 - Fine-grained rules: per tool, command prefix, path allowlist/denylist.
 - Risk levels: `ReadOnly` / `Low` / `Medium` / `High` / `Critical`.
 - Decision order: static rules first (tool, command pattern, path, network, destructive operations); an optional LLM classifier may handle unmatched operations and can only raise risk, never lower the static floor; undecidable operations default to `High`.
@@ -189,12 +191,12 @@ Inspired by Claude Code's permission modes:
 | --- | --- | --- |
 | `cow-core` | Domain model, errors, events, `Tool` trait | Existing |
 | `cow-bus` | Event bus and subscriptions | Existing |
-| `cow-tools` | Tool registry and sandbox backends | Existing (subprocess) |
+| `cow-tools` | Tool registry, sandbox backends, and static risk classification | Existing (subprocess) |
 | `cow-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cow-cli` | `cowai` CLI | Existing |
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
-| `cow-service` | Local bootstrap, channel/message services, assignment runtime, sequential crew runner, template management, and event wiring | Existing |
+| `cow-service` | Local bootstrap, channel/message services, assignment runtime, approval service, sequential crew runner, template management, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cow-client` | Unified local/remote client abstraction | Planned |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |

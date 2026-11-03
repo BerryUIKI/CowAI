@@ -3,7 +3,7 @@ use cow_core::agent::{AgentId, AgentProfile};
 use cow_core::error::{CowError, CowResult};
 use cow_core::event::{Event, EventPayload};
 use cow_core::task::Task;
-use cow_core::tool::ToolCall;
+use cow_core::tool::{ToolAuthorization, ToolCall, ToolGate};
 use cow_llm::{ChatCompletionRequest, ChatMessage, LlmProvider};
 use cow_tools::ToolRegistry;
 use std::sync::Arc;
@@ -15,6 +15,7 @@ pub struct AgentInstance {
     pub llm: Arc<dyn LlmProvider>,
     pub tools: ToolRegistry,
     pub model: String,
+    tool_gate: Option<Arc<dyn ToolGate>>,
 }
 
 impl AgentInstance {
@@ -29,7 +30,16 @@ impl AgentInstance {
             llm,
             tools,
             model: model.into(),
+            tool_gate: None,
         }
+    }
+
+    pub fn set_tool_gate(&mut self, gate: Option<Arc<dyn ToolGate>>) {
+        self.tool_gate = gate;
+    }
+
+    pub fn clear_tool_gate(&mut self) {
+        self.tool_gate = None;
     }
 
     pub fn id(&self) -> &AgentId {
@@ -136,9 +146,21 @@ impl AgentInstance {
                     call: tool_call.clone(),
                 }));
 
-                let tool_res = match self.tools.execute(&tool_call).await {
-                    Ok(res) => res,
-                    Err(e) => cow_core::tool::ToolResult::failure(&call.id, e.to_string()),
+                let authorization = if let Some(gate) = &self.tool_gate {
+                    gate.authorize(&self.profile.id, &tool_call).await?
+                } else {
+                    ToolAuthorization::Approved
+                };
+
+                let tool_res = match authorization {
+                    ToolAuthorization::Denied { reason } => cow_core::tool::ToolResult::failure(
+                        &call.id,
+                        format!("Tool call denied by approval policy: {reason}"),
+                    ),
+                    ToolAuthorization::Approved => match self.tools.execute(&tool_call).await {
+                        Ok(res) => res,
+                        Err(e) => cow_core::tool::ToolResult::failure(&call.id, e.to_string()),
+                    },
                 };
 
                 let _ = bus.publish(Event::new(EventPayload::ToolCallExecuted {

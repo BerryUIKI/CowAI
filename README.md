@@ -41,9 +41,10 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
+| Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Model providers | OpenAI-compatible endpoints, including DeepSeek, Ollama, and OpenRouter; mock providers for offline testing |
 
-**In progress:** Phase 1 milestones 1.1–1.4 are implemented. Tool approval policies, the desktop UI, and packaging are next. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**In progress:** Phase 1 milestones 1.1–1.5 are implemented. The desktop UI, packaging, and `.cowpkg` import/export are next. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Quick start
 

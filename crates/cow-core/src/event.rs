@@ -1,5 +1,7 @@
 use crate::agent::AgentId;
+use crate::approval::Approval;
 use crate::channel::{Channel, ChannelId, ChannelMessage};
+use crate::risk::RiskLevel;
 use crate::task::{Task, TaskId};
 use crate::tool::{ToolCall, ToolResult};
 use chrono::{DateTime, Utc};
@@ -29,6 +31,14 @@ pub enum EventPayload {
         agent_id: AgentId,
         result: ToolResult,
     },
+    /// A tool call is waiting for a human decision
+    ApprovalRequested {
+        approval: Approval,
+        risk: RiskLevel,
+        reason: String,
+    },
+    /// A pending approval was approved or rejected
+    ApprovalDecided { approval: Approval },
     /// Intermediate reasoning or thought emitted by an agent
     AgentThought { agent_id: AgentId, thought: String },
     /// Direct user prompt submitted to the platform
