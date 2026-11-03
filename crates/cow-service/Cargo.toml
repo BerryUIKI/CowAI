@@ -9,7 +9,11 @@ license.workspace = true
 cow-core = { workspace = true }
 cow-bus = { workspace = true }
 cow-store = { workspace = true }
+cow-agent = { workspace = true }
+chrono = { workspace = true }
 serde_json = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
+cow-llm = { workspace = true }
+cow-tools = { workspace = true }
