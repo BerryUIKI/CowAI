@@ -42,6 +42,12 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 - 桌面端默认本地模式，无需服务端；切换到团队模式只需更换 `cow-client` 的实现与连接配置。
 - 服务端从 v1 起支持多用户；本地模式自动创建单用户工作区，但数据模型与服务端一致。
 
+### 2.1 实施顺序
+
+1. **本地/离线优先**：桌面端 + 核心 + SQLite + 模板 + 审批 + 工具沙箱。
+2. **自托管团队模式**：`cow-server`、多用户、邀请、API Token、远程客户端。
+3. **扩展**：Docker 沙箱、IM/Webhook、长期记忆、PostgreSQL、模板市场。
+
 ---
 
 ## 3. 功能域划分
@@ -51,7 +57,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 - 实体：`User`、`Workspace`、`Membership`、`Role`（Owner / Admin / Member）。
 - 本地模式：首次启动自动创建本地 Owner 与默认工作区。
 - 团队模式：账号注册/登录、工作区邀请、成员角色管理、API Token。
-- v1 认证：本地账号密码 + API Token；OIDC/SSO 为 P1。
+- v1 认证：本地账号（Argon2id）、服务端不透明会话 Token、API Token；OIDC/SSO 为 P1。
 
 ### 3.2 协作空间（Collaboration）
 
@@ -65,6 +71,8 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 - `AgentProfile`：名称、角色、目标、背景、模型、工具集、迭代上限、是否允许委派。
 - 内置模板库：角色模板与团队模板（如开发团队、研究团队、写作团队），可在创建时选用。
 - 模板支持自定义、导入/导出；模板只是起点，不绑定具体场景。
+- 模板格式为 JSON（`schema_version` / `kind` / `agents` / `tasks`）；内置模板编译进二进制，用户模板存 SQLite，可导出为 `.cowtemplate`。
+- 模板只引用工具名与模型配置，不内嵌可执行代码；v1 不提供在线模板市场。
 
 ### 3.4 任务与编排（Tasks & Orchestration）
 
@@ -94,7 +102,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 
 ### 3.8 持久化与审计（Persistence & Audit）
 
-- `CowStore` 抽象；v1 实现 SQLite，P1 可选 PostgreSQL。
+- `CowStore` 抽象；v1 实现 SQLite（WAL），PostgreSQL 推迟到服务端阶段（P1）。
 - 存储实体：用户、工作区、成员、频道、消息、Agent、模板、任务、运行记录、工具调用、审批、审计事件。
 - 审计事件记录：谁在何时批准/拒绝了什么操作、Agent 执行了哪些工具。
 
@@ -131,7 +139,9 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 
 - 规则优先级：工作区策略 > Agent 策略 > 全局默认。
 - 细粒度规则：按工具、命令前缀、路径白名单/黑名单。
-- 风险判定可组合静态规则与 LLM 分类器（待定）。
+- 风险等级：`ReadOnly` / `Low` / `Medium` / `High` / `Critical`。
+- 判定顺序：静态规则优先（工具、命令模式、路径、网络、破坏性操作）；未命中时可选用 LLM 分类器，且只能上调风险、不能低于静态下限；无法判定按 `High` 处理。
+- 决策记录：规则 ID / 分类器 / 人工，与审批人一并写入审计。
 
 ### 4.3 本地模式与团队模式
 
@@ -149,6 +159,9 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 | `User` | id、name、email、password_hash、created_at |
 | `Workspace` | id、name、created_at |
 | `Membership` | user_id、workspace_id、role |
+| `Session` | id、user_id、token_hash、expires_at、created_at |
+| `ApiToken` | id、user_id、workspace_id、token_hash、scopes、revoked_at |
+| `Invite` | id、workspace_id、token_hash、role、expires_at |
 | `Channel` | id、workspace_id、name、topic、created_at |
 | `Message` | id、channel_id、sender、content、thread_id、created_at |
 | `AgentProfile` | id、workspace_id、name、role、goal、backstory、model、tools、limits |
@@ -176,6 +189,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 | `cow-store` | 持久化抽象与 SQLite/Postgres 实现 | 规划 |
 | `cow-server` | HTTP/WebSocket API、认证、多用户 | 规划 |
 | `cow-client` | 本地/远程统一客户端抽象 | 规划 |
+| `cow-package` | `.cowpkg` / `.cowtemplate` 导入导出 | 规划 |
 | `cow-desktop` | Tauri 桌面壳与前端集成 | 规划 |
 | 前端应用 | React + TypeScript（频道、任务、审批、Agent 管理 UI） | 规划 |
 
@@ -209,11 +223,15 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 2. **记忆范围**：v1 为会话 + 频道/任务历史；项目级长期记忆放 P1。
 3. **前端技术**：React + TypeScript（Tauri WebView）。
 4. **本地/团队模式**：数据独立，导入/导出为主，不做双向同步。
+5. **模板**：JSON 定义，内置模板编译进二进制，用户模板可导入/导出 `.cowtemplate`；v1 无在线市场。
+6. **风险判定**：静态规则优先（ReadOnly–Critical），可选 LLM 分类器仅上调风险；无法判定按 High 处理。
+7. **导入/导出**：`.cowpkg`（ZIP + manifest + JSON/JSONL），不包含密钥、密码哈希与 Token。
+8. **认证**：本地账号 + Argon2id + 不透明会话 Token + API Token；OIDC/SSO 放 P1。
+9. **PostgreSQL**：推迟到服务端阶段；先完成本地/离线功能。
 
 ### 9.2 待确认
 
-1. 模板格式与分发方式（内置 JSON、文件导入、在线仓库）。
-2. 风险操作判定：纯静态规则、LLM 分类器，还是组合。
-3. 导入/导出包的具体格式与兼容策略。
-4. 认证细节与 OIDC/SSO 的优先级。
-5. PostgreSQL 支持的时间点。
+1. 数据静态加密方案。
+2. 在线模板市场与模板签名机制（P2）。
+3. TLS 终止与反向代理部署细节。
+4. 邀请与通知渠道（邮件 / IM）。
