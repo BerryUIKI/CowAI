@@ -58,7 +58,7 @@ Delivered:
 | 1.1 | Persistence foundation (`cow-store`) | SQLite schema and migrations; repositories for users, workspaces, channels, messages, agents, templates, tasks, runs, tool calls, approvals, audit; WAL and transactional writes; store tests | Phase 0 |
 | 1.2 | Local identity and workspace | Local owner bootstrap; default workspace; channel/thread/message persistence; event bus wired to storage | 1.1 |
 | 1.3 | Agent templates and configuration | Template JSON schema; built-in templates compiled in; template CRUD and validation; `.cowtemplate` import/export | 1.1 |
-| 1.4 | Task orchestration | Task lifecycle and status transitions; sequential crew; context chaining; run records; cancellation and failure handling | 1.2, 1.3 |
+| 1.4 | Task orchestration | Assignment runtime (root/parent/depth tree, lifecycle, event log, budgets, stall guard, restart reconciliation); sequential crew on assignments; context chaining; cancellation and failure handling | 1.2, 1.3 |
 | 1.5 | Tools, sandbox, and approvals | Static risk classifier; Ask/SafeAuto/PlanOnly/Trusted modes; approval cards and audit records; code/file tools with limits | 1.2, 1.4 |
 | 1.6 | Desktop shell and UI | Tauri shell; React + TypeScript UI for channels, tasks, agents, approvals, templates, and settings; local `cow-client` | 1.2–1.5 |
 | 1.7 | Packaging and data exchange | Windows/macOS/Linux builds; `.cowpkg` workspace export/import; first-run onboarding; user documentation | 1.6 |
@@ -73,6 +73,7 @@ Delivered:
 - Risky operations trigger approvals according to the selected mode, and decisions appear in the audit log.
 - Code execution and file operations respect sandbox limits (timeout, output truncation, working directory).
 - Task deliverables and run history persist across restarts.
+- Assignments expose an append-only event log, enforce per-root budgets, and reconcile interrupted runs on startup.
 - A workspace can be exported to `.cowpkg` and re-imported into a fresh install.
 - All quality gates pass and the main flow is covered by integration tests.
 

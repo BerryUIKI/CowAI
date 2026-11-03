@@ -140,7 +140,7 @@ CowAI follows a "single core, two forms" model:
 | Agent template library | Built-in JSON role/team templates compiled into the app; custom templates and `.cowtemplate` import/export |
 | Collaboration space | Workspaces, channels, threads, message timeline; @Agent assignment; task cards and approval cards |
 | Agent management | Create/edit agents (role, goal, backstory, model, tools, iteration limit) |
-| Tasks and orchestration | Task creation, assignment, sequential crew execution, deliverables, and status transitions |
+| Tasks and orchestration | Task creation, assignment runtime (lifecycle, event log, budgets, restart reconciliation), sequential crew execution, deliverables, and status transitions |
 | Tools and sandbox | Code execution, file read/write; timeouts, output truncation, working-directory limits |
 | Approval policy | Modes (Ask / SafeAuto / PlanOnly / Trusted); static risk levels (ReadOnly–Critical); optional LLM classifier that can only raise risk; tool/command/path allowlists |
 | Model configuration | OpenAI-compatible endpoints (cloud APIs and local models), connection test |
