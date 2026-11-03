@@ -12,7 +12,7 @@ CowAI is an open-source, high-performance multi-agent collaboration platform wit
 
 - **Implemented baseline**: the workspace crates below, a working sequential agent crew, a local subprocess code sandbox, an OpenAI-compatible + mock LLM client, SQLite persistence via `cow-store`, and the `cowai` CLI (`run`, `tools`). Tests, `clippy -D warnings`, and `cargo fmt --check` pass.
 - **Known gaps** (not yet designed/built): hierarchical orchestration, persistence (tasks/messages/agent memory), human-in-the-loop tool approval, isolated sandbox backends (Docker/WASM), REST/WebSocket/Web UI surface, config file support, streaming responses, retries/rate limiting/token accounting, and channel-based collaboration actually wired into the CLI.
-- **Documentation plan** (to be written with the user): `docs/PRD.md` (product requirements), `docs/ARCHITECTURE.md` (functional + system architecture), `docs/ADR/` (decision records), `docs/ROADMAP.md`.
+- **Documentation plan** (to be written with the user): `docs/PRD.md` (product requirements), `docs/ARCHITECTURE.md` (functional + system architecture), `docs/ADR/` (decision records), `docs/ROADMAP.md`, `docs/TEMPLATE_FORMAT.md`, and `docs/REFERENCES.md` (external design references).
 - **Commit style**: small, atomic commits; frequent pushes and small PRs.
 - **Language**: all repository artifacts — code, comments, docs, commit messages, and branch names — must be English; conversation with the user may be Chinese.
 - **Git workflow**: GitFlow with `main` as the release branch and `dev` as the integration branch (see below).
