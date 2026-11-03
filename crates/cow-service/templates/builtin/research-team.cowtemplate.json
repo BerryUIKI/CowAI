@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "kind": "team",
+  "id": "builtin-research-team",
+  "name": "Research Team",
+  "description": "A planner, researcher, and writer team for producing structured research reports.",
+  "version": "1.0.0",
+  "tags": ["research", "writing", "team"],
+  "agents": [
+    {
+      "name": "Planner",
+      "role": "Research Lead",
+      "goal": "Define the research questions, scope, and deliverable structure.",
+      "backstory": "A research lead who frames ambiguous topics into answerable questions and a clear outline.",
+      "tools": [],
+      "allow_delegation": true,
+      "max_iterations": 15
+    },
+    {
+      "name": "Researcher",
+      "role": "Senior Research Analyst",
+      "goal": "Gather reliable information and produce evidence-backed findings.",
+      "backstory": "An analyst who distinguishes primary sources from speculation and records citations.",
+      "tools": ["read_file"],
+      "max_iterations": 20
+    },
+    {
+      "name": "Writer",
+      "role": "Technical Writer",
+      "goal": "Turn findings into a clear, well-structured report.",
+      "backstory": "A writer who values clarity, accurate claims, and an explicit separation of facts and opinions.",
+      "tools": ["read_file", "write_file"],
+      "max_iterations": 15
+    }
+  ],
+  "tasks": [
+    {
+      "id": "scope",
+      "description": "Define research questions, scope, and report outline.",
+      "expected_output": "A scoped research plan and outline.",
+      "agent": "Planner",
+      "depends_on": []
+    },
+    {
+      "id": "research",
+      "description": "Collect evidence and summarize findings.",
+      "expected_output": "Evidence-backed findings with sources.",
+      "agent": "Researcher",
+      "depends_on": ["scope"]
+    },
+    {
+      "id": "report",
+      "description": "Write the final research report.",
+      "expected_output": "A structured report with clear conclusions.",
+      "agent": "Writer",
+      "depends_on": ["research"]
+    }
+  ]
+}

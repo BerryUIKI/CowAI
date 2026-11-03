@@ -74,6 +74,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Templates can be customized, imported, and exported; they are a starting point, not a fixed scenario.
 - Template format is JSON (`schema_version` / `kind` / `agents` / `tasks`); built-in templates are compiled into the binary, user templates are stored in SQLite, and exports use `.cowtemplate`.
 - Templates only reference tool names and model configuration; they never embed executable code. v1 has no online template marketplace.
+- `cow-service::TemplateService` loads the compiled-in templates, validates documents (schema version, references, cycles), persists user templates, and imports/exports `.cowtemplate` files. Template format details live in `docs/TEMPLATE_FORMAT.md`.
 
 ### 3.4 Tasks and Orchestration
 
@@ -188,7 +189,7 @@ Inspired by Claude Code's permission modes:
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cow-cli` | `cowai` CLI | Existing |
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
-| `cow-service` | Local bootstrap, channel/message services, and event wiring | Existing |
+| `cow-service` | Local bootstrap, channel/message services, template management, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cow-client` | Unified local/remote client abstraction | Planned |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
