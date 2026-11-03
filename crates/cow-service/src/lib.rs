@@ -5,6 +5,8 @@
 
 mod bootstrap;
 mod channels;
+mod templates;
 
 pub use bootstrap::{bootstrap_local, bootstrap_local_named, LocalContext};
 pub use channels::ChannelService;
+pub use templates::{builtin_templates, TemplateService};

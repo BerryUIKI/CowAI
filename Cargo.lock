@@ -351,6 +351,7 @@ dependencies = [
  "cow-bus",
  "cow-core",
  "cow-store",
+ "serde_json",
  "tokio",
 ]
 
