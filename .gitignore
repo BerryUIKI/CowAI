@@ -18,4 +18,5 @@
 
 # Test / runtime temporary files
 /tmp/
+/output/
 /sandbox_workspace/
