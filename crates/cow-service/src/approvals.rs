@@ -139,10 +139,28 @@ impl ApprovalService {
                         })
                     }
                     ApprovalStatus::Pending => {
-                        self.record_audit("system", "tool.approval_timed_out", call, &assessment)
+                        self.store
+                            .decide_approval(&approval.id, ApprovalStatus::Expired, "system")
+                            .await?;
+                        let _ = self.bus.publish(Event::new(EventPayload::ApprovalDecided {
+                            approval: Approval {
+                                status: ApprovalStatus::Expired,
+                                decided_by: Some("system".to_string()),
+                                decided_at: Some(chrono::Utc::now()),
+                                ..approval.clone()
+                            },
+                        }));
+                        self.record_audit("system", "tool.approval_expired", call, &assessment)
                             .await?;
                         Ok(ToolAuthorization::Denied {
-                            reason: "approval timed out".to_string(),
+                            reason: "approval expired without a decision".to_string(),
+                        })
+                    }
+                    ApprovalStatus::Expired => {
+                        self.record_audit("system", "tool.approval_expired", call, &assessment)
+                            .await?;
+                        Ok(ToolAuthorization::Denied {
+                            reason: "approval expired without a decision".to_string(),
                         })
                     }
                 }
@@ -156,9 +174,9 @@ impl ApprovalService {
         status: ApprovalStatus,
         decided_by: &str,
     ) -> CowResult<Approval> {
-        if status == ApprovalStatus::Pending {
+        if status != ApprovalStatus::Approved && status != ApprovalStatus::Rejected {
             return Err(CowError::Config(
-                "cannot decide an approval as pending".to_string(),
+                "an approval can only be approved or rejected".to_string(),
             ));
         }
         self.store
@@ -222,11 +240,12 @@ impl ApprovalService {
                 actor,
                 action,
                 format!(
-                    "{} ({}) risk={} rule={}",
+                    "{} ({}) risk={} rule={} arguments={}",
                     call.name,
                     call.id,
                     assessment.level.as_str(),
-                    assessment.rule_id
+                    assessment.rule_id,
+                    call.arguments
                 ),
             ))
             .await

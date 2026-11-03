@@ -31,6 +31,7 @@ pub enum ApprovalStatus {
     Pending,
     Approved,
     Rejected,
+    Expired,
 }
 
 /// Effective approval level for an assignment.
