@@ -34,6 +34,9 @@ pub struct AgentProfile {
     pub goal: String,
     /// Contextual background and persona for prompt generation
     pub backstory: String,
+    /// Optional model identifier used by this agent
+    #[serde(default)]
+    pub model: Option<String>,
     /// Available tool names assigned to this agent
     pub tools: Vec<String>,
     /// Whether this agent is permitted to delegate sub-tasks to other agents
@@ -57,6 +60,7 @@ impl AgentProfile {
             role: role.into(),
             goal: goal.into(),
             backstory: backstory.into(),
+            model: None,
             tools: Vec::new(),
             allow_delegation: false,
             max_iterations: 15,
@@ -66,6 +70,11 @@ impl AgentProfile {
 
     pub fn with_tool(mut self, tool: impl Into<String>) -> Self {
         self.tools.push(tool.into());
+        self
+    }
+
+    pub fn with_model(mut self, model: impl Into<String>) -> Self {
+        self.model = Some(model.into());
         self
     }
 

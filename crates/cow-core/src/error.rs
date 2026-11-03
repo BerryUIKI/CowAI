@@ -32,6 +32,9 @@ pub enum CowError {
 
     #[error("Configuration error: {0}")]
     Config(String),
+
+    #[error("Storage error: {0}")]
+    Storage(String),
 }
 
 pub type CowResult<T> = Result<T, CowError>;
