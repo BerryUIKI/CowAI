@@ -33,6 +33,17 @@ pub enum ApprovalStatus {
     Rejected,
 }
 
+/// Effective approval level for an assignment.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ApprovalLevel {
+    #[default]
+    Ask,
+    SafeAuto,
+    PlanOnly,
+    Trusted,
+}
+
 /// A human decision required before a tool call executes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Approval {
