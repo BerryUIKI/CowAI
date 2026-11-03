@@ -19,12 +19,13 @@ CowAI is an open-source, high-performance multi-agent collaboration platform wit
 
 ## Git Workflow (GitFlow)
 
-- `main` — release-ready history only.
-- `dev` — integration branch for completed features; all feature work merges here first (the branch is `dev`, not `develop`).
-- `feature/<name>` — branched from `dev`, merged back into `dev` with `--no-ff`.
-- `release/<version>` — branched from `dev` when preparing a release, merged into both `main` and `dev`.
-- `hotfix/<name>` — branched from `main` for urgent fixes, merged into both `main` and `dev`.
-- Commit messages are small, atomic, and English; pull requests target `dev` unless they are release or hotfix PRs.
+- **Strict rule**: NEVER push directly to `dev` or `main`. Both branches have GitHub branch protection enabled with pull request requirements and force-push/deletion blocked.
+- `main` — release-ready history only; protected.
+- `dev` — integration branch for completed features; protected. All feature pull requests must target `dev`.
+- `feature/<name>` — branched from `dev`, pushed to origin, and merged into `dev` via Pull Request (`gh pr create --base dev`).
+- `release/<version>` — branched from `dev` when preparing a release, merged into both `main` and `dev` via Pull Request.
+- `hotfix/<name>` — branched from `main` for urgent fixes, merged into both `main` and `dev` via Pull Request.
+- Commit messages are small, atomic, and English; always use PRs to merge into `dev`.
 
 ## Language
 
