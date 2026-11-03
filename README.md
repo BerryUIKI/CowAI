@@ -38,6 +38,7 @@ CowAI/
 │   ├── cow-llm/       # OpenAI-compatible & Mock LLM providers
 │   ├── cow-agent/     # Agent runtime loop & Crew orchestration
 │   ├── cow-store/     # SQLite persistence, migrations, and repositories
+│   ├── cow-service/   # Local bootstrap, channel, and message services
 │   └── cow-cli/       # Command-line interface (`cowai`)
 ```
 
