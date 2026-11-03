@@ -186,7 +186,7 @@ Inspired by Claude Code's permission modes:
 | `cow-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cow-cli` | `cowai` CLI | Existing |
-| `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Planned |
+| `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cow-client` | Unified local/remote client abstraction | Planned |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
