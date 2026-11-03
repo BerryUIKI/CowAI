@@ -194,7 +194,7 @@ Inspired by Claude Code's permission modes:
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cow-cli` | `cowai` CLI | Existing |
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
-| `cow-service` | Local bootstrap, channel/message services, template management, and event wiring | Existing |
+| `cow-service` | Local bootstrap, channel/message services, assignment runtime, sequential crew runner, template management, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cow-client` | Unified local/remote client abstraction | Planned |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |

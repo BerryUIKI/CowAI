@@ -13,6 +13,7 @@ CowAI is a modern, modular multi-agent platform designed for collaborative softw
   - **Agents**: Configured with `role`, `goal`, `backstory`, capabilities, and iteration limits.
   - **Tasks**: Explicit descriptions, expected deliverables, and prerequisite context chaining.
   - **Crews**: Group agents into sequential or hierarchical workflows.
+  - **Assignment runtime**: Task trees, event-logged lifecycle transitions, budgets, stall guards, and restart reconciliation.
 - **💬 Mattermost-Inspired Collaboration**:
   - Asynchronous event bus (`cow-bus`) supporting pub/sub event distribution.
   - Structured channels and threaded messages for human-in-the-loop supervision and agent collaboration.
