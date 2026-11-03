@@ -1,0 +1,17 @@
+[package]
+name = "cow-agent"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+cow-core = { workspace = true }
+cow-bus = { workspace = true }
+cow-tools = { workspace = true }
+cow-llm = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }

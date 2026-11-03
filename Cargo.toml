@@ -1,20 +1,20 @@
 [workspace]
 members = [
-    "crates/berry-core",
-    "crates/berry-bus",
-    "crates/berry-tools",
-    "crates/berry-llm",
-    "crates/berry-agent",
-    "crates/berry-cli",
+    "crates/cow-core",
+    "crates/cow-bus",
+    "crates/cow-tools",
+    "crates/cow-llm",
+    "crates/cow-agent",
+    "crates/cow-cli",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["BerryBot Contributors"]
+authors = ["CowAI Contributors"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/BerryBot/BerryBot"
+repository = "https://github.com/BerryUIKI/CowAI"
 
 [workspace.dependencies]
 # Async & runtime
@@ -43,8 +43,8 @@ tempfile = "3.10"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
 # Internal workspace crates
-berry-core = { path = "crates/berry-core" }
-berry-bus = { path = "crates/berry-bus" }
-berry-tools = { path = "crates/berry-tools" }
-berry-llm = { path = "crates/berry-llm" }
-berry-agent = { path = "crates/berry-agent" }
+cow-core = { path = "crates/cow-core" }
+cow-bus = { path = "crates/cow-bus" }
+cow-tools = { path = "crates/cow-tools" }
+cow-llm = { path = "crates/cow-llm" }
+cow-agent = { path = "crates/cow-agent" }
