@@ -40,7 +40,7 @@ The project is structured as a Cargo workspace under `crates/`:
 - **`crates/cow-llm`**: `LlmProvider` abstraction with an OpenAI-compatible HTTP client (works with OpenAI, DeepSeek, Ollama, etc.) and a `MockLlmProvider` for offline tests and dry runs.
 - **`crates/cow-agent`**: Agent runtime loop (LLM call → tool calls → observations), `Crew` orchestration (`ProcessType::Sequential`), and preset roles in `StandardRoles` (Planner, Coder, Reviewer).
 - **`crates/cow-store`**: SQLite persistence built on `sqlx`: embedded migrations, connection management, and repository methods for identity, collaboration, agents/templates, tasks/runs/tool calls/approvals, and audit events.
-- **`crates/cow-service`**: Application services for the local runtime: idempotent local owner/workspace bootstrap and channel/message operations that persist first and then publish events on the bus.
+- **`crates/cow-service`**: Application services for the local runtime: idempotent local owner/workspace bootstrap, channel/message operations that persist first and then publish events, and template management with built-in templates, validation, CRUD, and `.cowtemplate` import/export.
 - **`crates/cow-cli`**: The `cowai` binary exposing `run` (crew execution, `--dry-run` for mock LLM) and `tools` (registry inspection + sandbox smoke test).
 
 ## Common Development Commands

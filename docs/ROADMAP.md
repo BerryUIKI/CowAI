@@ -63,7 +63,7 @@ Delivered:
 | 1.6 | Desktop shell and UI | Tauri shell; React + TypeScript UI for channels, tasks, agents, approvals, templates, and settings; local `cow-client` | 1.2–1.5 |
 | 1.7 | Packaging and data exchange | Windows/macOS/Linux builds; `.cowpkg` workspace export/import; first-run onboarding; user documentation | 1.6 |
 
-> **Progress**: milestones 1.1 and 1.2 are implemented — `cow-store` provides embedded SQLite migrations and repositories, and `cow-service` provides idempotent local owner/workspace bootstrap plus channel/message persistence wired to the event bus.
+> **Progress**: milestones 1.1–1.3 are implemented — `cow-store` provides embedded SQLite migrations and repositories, `cow-service` provides idempotent local bootstrap and channel/message persistence wired to the event bus, and the template service adds validated built-in templates with `.cowtemplate` import/export.
 
 ### 4.2 Phase 1 Exit Criteria
 

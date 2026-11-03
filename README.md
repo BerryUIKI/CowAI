@@ -20,6 +20,8 @@ CowAI is a modern, modular multi-agent platform designed for collaborative softw
   - `cow-tools` includes a subprocess sandbox for executing code, running shell commands, and manipulating files with timeout protection and output truncation.
 - **🗄️ Local-First Persistence**:
   - `cow-store` provides embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, approvals, and audit events.
+- **🧩 Built-in Templates**:
+  - JSON agent and team templates are compiled into the app; user templates support `.cowtemplate` import/export with schema validation.
 - **🔌 Pluggable LLM Providers**:
   - First-class support for OpenAI, DeepSeek, Ollama, OpenRouter, and any OpenAI-compatible API, plus local mock providers for deterministic testing.
 
