@@ -69,7 +69,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 ### 3.4 任务与编排（Tasks & Orchestration）
 
 - 任务生命周期：`Pending → Assigned → Running → WaitingApproval → Completed / Failed / Cancelled`。
-- v1 建议范围：单 Agent 任务 + 顺序 Crew（`ProcessType::Sequential`）。
+- v1 范围（已确认）：单 Agent 任务 + 顺序 Crew（`ProcessType::Sequential`）。
 - 后续：层级编排（Manager Agent 委派）与 DAG 工作流。
 - 任务支持前置依赖（`context_tasks`），前置交付物注入下游上下文。
 
@@ -88,7 +88,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 
 ### 3.7 记忆与知识（Memory）
 
-- v1：会话上下文 + 频道/任务历史作为短期记忆来源。
+- v1（已确认）：会话上下文 + 频道/任务历史作为短期记忆来源。
 - P1：项目级长期记忆与知识库（检索增强），需要明确存储与隐私边界。
 - Agent 记忆不得跨工作区泄漏。
 
@@ -138,6 +138,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 - **本地模式**：单用户、进程内核心、SQLite；无需网络与服务端。
 - **团队模式**：多用户、远程 `cow-server`、共享工作区；桌面端只做展示与交互。
 - 两种模式共用领域模型与 UI；差异封装在 `cow-client` 与认证层。
+- **数据打通（v1）**：两种模式的数据相互独立，通过导入/导出迁移（工作区包、模板包、任务归档），不做双向同步。
 
 ---
 
@@ -176,7 +177,7 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 | `cow-server` | HTTP/WebSocket API、认证、多用户 | 规划 |
 | `cow-client` | 本地/远程统一客户端抽象 | 规划 |
 | `cow-desktop` | Tauri 桌面壳与前端集成 | 规划 |
-| 前端应用 | 频道、任务、审批、Agent 管理 UI | 规划 |
+| 前端应用 | React + TypeScript（频道、任务、审批、Agent 管理 UI） | 规划 |
 
 ---
 
@@ -200,11 +201,19 @@ CLI（cowai）── cow-client ── 本地模式或远程服务器
 
 ---
 
-## 9. 待确认问题
+## 9. 已确认决策与待确认问题
 
-1. v1 编排范围：仅单 Agent + 顺序 Crew，还是同时支持层级/DAG？
-2. v1 记忆范围：仅会话与频道/任务历史，还是包含项目级长期记忆？
-3. 桌面前端技术栈：React / Svelte / Leptos（或由实现阶段决定）？
-4. 本地模式与团队模式的同步策略：只支持导入/导出，还是需要双向同步？
-5. 模板格式与分发：内置 JSON、文件导入，还是在线模板仓库？
-6. 风险操作判定：纯静态规则、LLM 分类器，还是两者组合？
+### 9.1 已确认（2026-11-03）
+
+1. **编排范围**：v1 为单 Agent + 顺序 Crew；层级 Manager 与 DAG 放 P1。
+2. **记忆范围**：v1 为会话 + 频道/任务历史；项目级长期记忆放 P1。
+3. **前端技术**：React + TypeScript（Tauri WebView）。
+4. **本地/团队模式**：数据独立，导入/导出为主，不做双向同步。
+
+### 9.2 待确认
+
+1. 模板格式与分发方式（内置 JSON、文件导入、在线仓库）。
+2. 风险操作判定：纯静态规则、LLM 分类器，还是组合。
+3. 导入/导出包的具体格式与兼容策略。
+4. 认证细节与 OIDC/SSO 的优先级。
+5. PostgreSQL 支持的时间点。
