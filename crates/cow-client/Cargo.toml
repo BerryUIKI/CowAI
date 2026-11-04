@@ -10,6 +10,7 @@ cow-core = { workspace = true }
 cow-bus = { workspace = true }
 cow-store = { workspace = true }
 cow-service = { workspace = true }
+cow-agent = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 tracing = { workspace = true }
@@ -17,3 +18,5 @@ tracing = { workspace = true }
 [dev-dependencies]
 tokio = { workspace = true }
 serde_json = { workspace = true }
+cow-llm = { workspace = true }
+cow-tools = { workspace = true }

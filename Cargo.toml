@@ -55,4 +55,5 @@ cow-tools = { path = "crates/cow-tools" }
 cow-llm = { path = "crates/cow-llm" }
 cow-agent = { path = "crates/cow-agent" }
 cow-store = { path = "crates/cow-store" }
+cow-client = { path = "crates/cow-client" }
 cow-service = { path = "crates/cow-service" }

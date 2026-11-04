@@ -1,10 +1,17 @@
+use std::sync::Arc;
+
+use cow_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
 use cow_client::{Client, LocalClient, NewTask};
 use cow_core::agent::AgentId;
+use cow_core::approval::ApprovalLevel;
 use cow_core::assignment::AssignmentStatus;
 use cow_core::channel::Sender;
 use cow_core::event::EventPayload;
-use cow_core::task::TaskStatus;
+use cow_core::run::RunStatus;
+use cow_core::task::{Task, TaskStatus};
 use cow_core::template::TemplateDocument;
+use cow_llm::MockLlmProvider;
+use cow_tools::ToolRegistry;
 
 #[tokio::test]
 async fn local_client_bootstraps_a_session() {
@@ -166,4 +173,39 @@ async fn local_client_manages_custom_templates() {
         .await
         .unwrap()
         .is_none());
+}
+
+#[tokio::test]
+async fn local_client_runs_a_crew_and_persists_history() {
+    let client = LocalClient::open_in_memory().await.unwrap();
+
+    let profile = StandardRoles::planner();
+    let agent_id = profile.id.clone();
+    let mut crew = Crew::new(ProcessType::Sequential);
+    crew.add_agent(AgentInstance::new(
+        profile,
+        Arc::new(MockLlmProvider::echo()),
+        ToolRegistry::new(),
+        "mock-model",
+    ));
+    let task = Task::new("Plan the change", "A plan").assign_to(agent_id);
+    let task_id = task.id.clone();
+    crew.add_task(task);
+
+    let results = client
+        .run_crew(&mut crew, ApprovalLevel::Ask)
+        .await
+        .unwrap();
+    assert!(results.contains_key(&task_id));
+
+    let stored = client.get_task(&task_id).await.unwrap().unwrap();
+    assert!(matches!(stored.status, TaskStatus::Completed { .. }));
+
+    let assignments = client.list_assignments(&task_id).await.unwrap();
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].status, AssignmentStatus::Completed);
+
+    let runs = client.list_runs(&task_id).await.unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].status, RunStatus::Completed);
 }
