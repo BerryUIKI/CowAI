@@ -106,7 +106,10 @@ async fn auto_approval_records_audit() {
         )
         .await
         .unwrap();
-    assert_eq!(authorization, ToolAuthorization::Approved);
+    assert_eq!(
+        authorization,
+        ToolAuthorization::Approved { approved_by: None }
+    );
 
     let events = store.list_audit_events(&workspace_id, 20).await.unwrap();
     assert!(events
@@ -222,7 +225,12 @@ async fn already_decided_approval_cannot_be_decided_again() {
     .unwrap();
 
     let authorization = authorize.await.unwrap().unwrap();
-    assert_eq!(authorization, ToolAuthorization::Approved);
+    assert_eq!(
+        authorization,
+        ToolAuthorization::Approved {
+            approved_by: Some("user-1".to_string())
+        }
+    );
 
     let stored = store.get_approval(&first).await.unwrap().unwrap();
     assert_eq!(stored.status, ApprovalStatus::Approved);
@@ -256,7 +264,12 @@ async fn pending_approval_is_approved_by_a_human() {
         )
         .await
         .unwrap();
-    assert_eq!(authorization, ToolAuthorization::Approved);
+    assert_eq!(
+        authorization,
+        ToolAuthorization::Approved {
+            approved_by: Some("user-1".to_string())
+        }
+    );
 
     let pending = store
         .list_pending_approvals(&assignment.task_id)

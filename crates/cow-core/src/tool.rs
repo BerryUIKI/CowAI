@@ -70,7 +70,7 @@ pub trait Tool: Send + Sync {
 /// Result of checking a tool call against the approval policy.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ToolAuthorization {
-    Approved,
+    Approved { approved_by: Option<String> },
     Denied { reason: String },
 }
 
