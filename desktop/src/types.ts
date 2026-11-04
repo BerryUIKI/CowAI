@@ -44,3 +44,168 @@ export interface CowEvent {
     payload?: unknown;
   };
 }
+
+export type ApprovalLevel = "ask" | "safe_auto" | "plan_only" | "trusted";
+
+export type TaskStatus =
+  | "pending"
+  | "in_progress"
+  | "cancelled"
+  | { completed: { output: string } }
+  | { failed: { error: string } };
+
+export interface Task {
+  id: string;
+  description: string;
+  expected_output: string;
+  assigned_agent: string | null;
+  context_tasks: string[];
+  status: TaskStatus;
+}
+
+export type AssignmentStatus =
+  | "queued"
+  | "running"
+  | "waiting"
+  | "resume"
+  | "needs_input"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export type AssignmentOutcome =
+  | { status: "completed"; detail: { output: string } }
+  | { status: "failed"; detail: { error: string } }
+  | { status: "cancelled"; detail: { reason: string } };
+
+export interface Assignment {
+  id: string;
+  root_id: string;
+  parent_id: string | null;
+  depth: number;
+  task_id: string;
+  assignee: string;
+  status: AssignmentStatus;
+  executions: number;
+  restarts: number;
+  wakes: number;
+  approval_level: ApprovalLevel;
+  outcome: AssignmentOutcome | null;
+  last_error: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type AssignmentEventKind =
+  | "enqueued"
+  | "started"
+  | "waiting"
+  | "resumed"
+  | "needs_input"
+  | "completed"
+  | "failed"
+  | "cancelled"
+  | "restarted"
+  | "stalled"
+  | "budget_exhausted";
+
+export interface AssignmentEvent {
+  id: string;
+  assignment_id: string;
+  kind: AssignmentEventKind;
+  detail: string | null;
+  created_at: string;
+}
+
+export type RunStatus =
+  | "running"
+  | "waiting_approval"
+  | "completed"
+  | "failed"
+  | "cancelled";
+
+export interface Run {
+  id: string;
+  task_id: string;
+  agent_id: string;
+  status: RunStatus;
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface ToolCallRecord {
+  id: string;
+  run_id: string;
+  name: string;
+  arguments: unknown;
+  result: unknown;
+  approved_by: string | null;
+  created_at: string;
+}
+
+export type ApprovalStatus = "pending" | "approved" | "rejected" | "expired";
+
+export interface Approval {
+  id: string;
+  task_id: string;
+  tool_call_id: string;
+  status: ApprovalStatus;
+  decided_by: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  role: string;
+  goal: string;
+  backstory: string;
+  model: string | null;
+  tools: string[];
+  allow_delegation: boolean;
+  max_iterations: number;
+  verbose: boolean;
+}
+
+export interface TemplateDocument {
+  id: string;
+  name: string;
+  description: string;
+  kind: string;
+  agents: unknown[];
+  tasks: unknown[];
+}
+
+const taskStatusLabels = {
+  pending: "Pending",
+  in_progress: "In progress",
+  completed: "Completed",
+  failed: "Failed",
+  cancelled: "Cancelled",
+} as const;
+
+export function taskStatusKind(
+  status: TaskStatus,
+): "pending" | "in_progress" | "completed" | "failed" | "cancelled" {
+  if (typeof status === "string") return status;
+  return "completed" in status ? "completed" : "failed";
+}
+
+export function taskStatusLabel(status: TaskStatus): string {
+  return taskStatusLabels[taskStatusKind(status)];
+}
+
+export function approvalLevelLabel(level: ApprovalLevel): string {
+  switch (level) {
+    case "ask":
+      return "Ask";
+    case "safe_auto":
+      return "Safe auto";
+    case "plan_only":
+      return "Plan only";
+    case "trusted":
+      return "Trusted";
+  }
+}
+
