@@ -21,10 +21,11 @@ The mock provider needs no model service or API credentials. It produces mock de
 - `cowbot-store`: SQLite migrations and repositories.
 - `cowbot-service`: bootstrap, channels, templates, assignments, approvals, and persisted crew execution.
 - `cowbot-client`: transport-neutral data/command interface and `LocalClient`; opening it initializes storage and reconciles interrupted state.
+- `cowbot-package`: `.cowpkg` workspace packages — manifest, checksums, export, and verified import.
 - `cowbot-agent`: sequential crews, runtime loop, and an optional tool gate.
 - `cowbot-tools`: tool registry, subprocess/file tools, and static risk classification.
 - `cowbot-llm`: OpenAI-compatible transport and mock provider.
-- `cowbot-cli`: `init`, `run`, and `tools`; `run` executes through `LocalClient::run_crew`.
+- `cowbot-cli`: `init`, `run`, `tools`, `export`, and `import`; `run` executes through `LocalClient::run_crew`, and `export`/`import` read the `.cowpkg` format directly.
 - `desktop`: React/TypeScript frontend and standalone Tauri backend, outside the root Cargo workspace. The frontend calls Tauri commands wrapping the client boundary, never SQLite directly.
 
 Review [architecture](ARCHITECTURE.md), [ADRs](ADR/README.md), and [template format](TEMPLATE_FORMAT.md) before changing boundaries. Designs are agreed for Phase 1; discuss changes and new scope before implementation. Desktop execution, remote mode, packaging, and other roadmap items remain unfinished; consult [CLAUDE.md](../CLAUDE.md) for current gaps.

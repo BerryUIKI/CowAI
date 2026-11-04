@@ -5,6 +5,7 @@ use cowbot_core::approval::ApprovalLevel;
 use cowbot_core::event::EventPayload;
 use cowbot_core::task::Task;
 use cowbot_llm::{LlmProvider, MockLlmProvider, OpenAiCompatibleProvider};
+use cowbot_store::Store;
 use cowbot_tools::{
     CodeExecutionTool, ReadFileTool, SandboxBackend, SubprocessSandbox, ToolRegistry, WriteFileTool,
 };
@@ -69,6 +70,28 @@ enum Commands {
 
     /// Inspect registered tools and test sandbox code execution
     Tools,
+
+    /// Export the local workspace to a `.cowpkg` file
+    Export {
+        /// Destination path for the package
+        #[arg(short, long)]
+        output: PathBuf,
+
+        /// SQLite database path
+        #[arg(long, env = "COWBOT_DB")]
+        db: Option<PathBuf>,
+    },
+
+    /// Import a `.cowpkg` file as a new workspace
+    Import {
+        /// Path to the package to import
+        #[arg(short, long)]
+        input: PathBuf,
+
+        /// SQLite database path
+        #[arg(long, env = "COWBOT_DB")]
+        db: Option<PathBuf>,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
@@ -92,6 +115,43 @@ impl From<ApprovalLevelArg> for ApprovalLevel {
 
 fn database_path(db: Option<PathBuf>) -> PathBuf {
     db.unwrap_or_else(|| PathBuf::from("cowbot.db"))
+}
+
+async fn export_package(output: PathBuf, db: Option<PathBuf>) -> anyhow::Result<()> {
+    let path = database_path(db);
+    let store = Store::connect(&path).await?;
+    store.migrate().await?;
+    let context = cowbot_service::bootstrap_local(&store).await?;
+
+    let bytes = cowbot_package::export_workspace(&store, &context.workspace.id).await?;
+    std::fs::write(&output, &bytes)?;
+
+    println!("Exported workspace to {}", output.display());
+    println!("  bytes:     {}", bytes.len());
+    println!("  workspace: {}", context.workspace.name);
+    Ok(())
+}
+
+async fn import_package(input: PathBuf, db: Option<PathBuf>) -> anyhow::Result<()> {
+    let path = database_path(db);
+    let bytes = std::fs::read(&input)?;
+
+    let manifest = cowbot_package::inspect(&bytes)?;
+    let store = Store::connect(&path).await?;
+    store.migrate().await?;
+    let summary = cowbot_package::import_workspace(&store, &bytes).await?;
+
+    println!("Imported package from {}", input.display());
+    println!(
+        "  workspace:    {} ({})",
+        summary.workspace_name, summary.workspace_id
+    );
+    println!("  exported by:  {}", manifest.exported_by.workspace_name);
+    println!(
+        "  contents:     {} channels, {} messages, {} agents, {} tasks, {} runs",
+        summary.channels, summary.messages, summary.agents, summary.tasks, summary.runs
+    );
+    Ok(())
 }
 
 #[tokio::main]
@@ -127,6 +187,12 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Tools => {
             inspect_tools().await?;
+        }
+        Commands::Export { output, db } => {
+            export_package(output, db).await?;
+        }
+        Commands::Import { input, db } => {
+            import_package(input, db).await?;
         }
     }
 
