@@ -2,7 +2,7 @@
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cowbot-wordmark-dark.svg">
     <source media="(prefers-color-scheme: light)" srcset="assets/brand/cowbot-wordmark-light.svg">
-    <img src="assets/brand/cowbot-wordmark-light.svg" alt="CowBot — a cow icon beside serif lettering" width="440">
+    <img src="assets/brand/cowbot-wordmark-light.svg" alt="CowBot — a cow icon beside serif lettering" width="560">
   </picture>
 </p>
 
@@ -40,12 +40,13 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | React channels/messages, task creation and history, cancellation, and pending approval decisions via Tauri |
+| Desktop shell | React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, and agents/templates settings via Tauri |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
+| Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI |
 | Model providers | OpenAI-compatible endpoints, including DeepSeek, Ollama, and OpenRouter; mock providers for offline testing |
 
-**In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, and Approvals views. Starting execution from the desktop, agents/templates management, settings, packaging, and `.cowpkg` import/export remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, Approvals, and Settings views plus desktop-initiated crew execution. Milestone 1.7 adds `.cowpkg` workspace export/import. Installer packaging, first-run onboarding, desktop import/export, and remote mode remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Naming and compatibility
 
@@ -137,13 +138,19 @@ npm ci
 npm run tauri dev
 ```
 
-Install Node.js/npm and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation/inspection/cancellation, and approvals; it does not start task execution yet.
+Install Node.js/npm and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation, crew execution, approvals, and agents/templates settings. Model selection, workspace import/export, and installer packaging are not implemented yet.
 
 ## Architecture
 
-![Current local runtime: CLI and desktop use cowbot-client; services persist state and coordinate approvals and agents.](docs/assets/architecture.svg)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/architecture-light.svg">
+    <img src="docs/assets/architecture-light.svg" alt="Current local runtime: CLI and desktop use cowbot-client; services persist state and coordinate approvals and agents." width="100%">
+  </picture>
+</p>
 
-Nine focused crates keep the domain model, runtime, and application services separate:
+Ten focused crates keep the domain model, runtime, and application services separate:
 
 | Crate | Responsibility |
 | --- | --- |
@@ -162,9 +169,15 @@ Read the [functional and system architecture](docs/ARCHITECTURE.md) for the plan
 
 ## Workspace concept
 
-![Illustrative CowBot workspace with channels, task progress, and approval cards.](docs/assets/workspace-concept.svg)
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/workspace-concept.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/workspace-concept-light.svg">
+    <img src="docs/assets/workspace-concept-light.svg" alt="Illustrative CowBot workspace with channels, task progress, and approval cards." width="100%">
+  </picture>
+</p>
 
-**Illustrative SVG, not an application screenshot.** It visualizes the channel-first direction. The current shell already has Channels, Tasks, and Approvals views; integrated desktop execution and this exact layout are not implemented.
+**Illustrative SVG, not an application screenshot.** It visualizes the channel-first direction. The current shell already has Channels, Tasks, Approvals, and Settings views, and can start crew execution from a task; this exact layout is not implemented.
 
 ## Documentation
 
@@ -196,4 +209,4 @@ Report reproducible bugs and discuss proposals through [GitHub Issues](https://g
 
 ## License
 
-CowBot is licensed under the [Apache License, Version 2.0](LICENSE). All nine workspace crates and the standalone desktop package declare Apache-2.0. Third-party dependencies retain their own licenses.
+CowBot is licensed under the [Apache License, Version 2.0](LICENSE). All ten workspace crates and the standalone desktop package declare Apache-2.0. Third-party dependencies retain their own licenses.

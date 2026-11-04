@@ -18,6 +18,6 @@ The PRD, architecture, roadmap, and ADRs include both implemented milestones and
 
 ## Visual assets
 
-[Runtime architecture](assets/architecture.svg) depicts current code. [Workspace concept](assets/workspace-concept.svg) illustrates the workspace direction and must retain its concept label; it is not an application screenshot. SVGs are editable source assets with accessible titles and descriptions; keep them self-contained, readable, and free of embedded scripts or external resources. Update the README alt text when changing their meaning.
+[Runtime architecture](assets/architecture.svg) depicts current code. [Workspace concept](assets/workspace-concept.svg) illustrates the workspace direction and must retain its concept label; it is not an application screenshot. Both ship a `-light.svg` counterpart for light backgrounds; the README serves each through a `<picture>` element so the diagram follows the reader's color scheme. SVGs are editable source assets with accessible titles and descriptions; keep them self-contained, readable, and free of embedded scripts or external resources. Update the README alt text and both variants when changing their meaning.
 
 Additional references: [Desktop setup](../desktop/README.md), [template format](TEMPLATE_FORMAT.md), [design references](REFERENCES.md), and [brand assets](../assets/README.md).
