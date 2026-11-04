@@ -306,7 +306,7 @@ dependencies = [
  "anyhow",
  "clap",
  "cow-agent",
- "cow-bus",
+ "cow-client",
  "cow-core",
  "cow-llm",
  "cow-tools",
@@ -322,10 +322,13 @@ name = "cow-client"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "cow-agent",
  "cow-bus",
  "cow-core",
+ "cow-llm",
  "cow-service",
  "cow-store",
+ "cow-tools",
  "serde_json",
  "tokio",
  "tracing",
