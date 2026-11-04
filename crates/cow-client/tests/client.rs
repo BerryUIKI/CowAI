@@ -1,6 +1,7 @@
 use cow_client::{Client, LocalClient};
 use cow_core::channel::Sender;
 use cow_core::event::EventPayload;
+use cow_core::template::TemplateDocument;
 
 #[tokio::test]
 async fn local_client_bootstraps_a_session() {
@@ -67,4 +68,69 @@ async fn local_client_streams_events() {
         EventPayload::MessagePosted(posted) => assert_eq!(posted.id, message.id),
         other => panic!("expected MessagePosted, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn local_client_lists_and_instantiates_templates() {
+    let client = LocalClient::open_in_memory().await.unwrap();
+
+    let templates = client.list_templates().await.unwrap();
+    let ids: Vec<&str> = templates
+        .iter()
+        .map(|template| template.id.as_str())
+        .collect();
+    assert!(ids.contains(&"builtin-software-team"));
+    assert!(ids.contains(&"builtin-research-team"));
+    assert!(ids.contains(&"builtin-general-assistant"));
+
+    let agents = client
+        .instantiate_agents("builtin-software-team")
+        .await
+        .unwrap();
+    assert_eq!(agents.len(), 3);
+    let names: Vec<&str> = agents.iter().map(|agent| agent.name.as_str()).collect();
+    assert_eq!(names, vec!["Planner", "Coder", "Reviewer"]);
+
+    let stored = client.list_agents().await.unwrap();
+    assert_eq!(stored.len(), 3);
+    let stored_names: Vec<&str> = stored.iter().map(|agent| agent.name.as_str()).collect();
+    for expected in ["Planner", "Coder", "Reviewer"] {
+        assert!(stored_names.contains(&expected));
+    }
+}
+
+#[tokio::test]
+async fn local_client_manages_custom_templates() {
+    let client = LocalClient::open_in_memory().await.unwrap();
+
+    let exported = client
+        .export_template("builtin-general-assistant")
+        .await
+        .unwrap();
+    let mut document: TemplateDocument = serde_json::from_str(&exported).unwrap();
+    document.id = "custom-assistant".to_string();
+    document.name = "Custom Assistant".to_string();
+
+    let json = serde_json::to_string(&document).unwrap();
+    let imported = client.import_template(&json).await.unwrap();
+    assert_eq!(imported.id, "custom-assistant");
+
+    let fetched = client
+        .get_template("custom-assistant")
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fetched.name, "Custom Assistant");
+
+    let listed = client.list_templates().await.unwrap();
+    assert!(listed
+        .iter()
+        .any(|template| template.id == "custom-assistant"));
+
+    client.delete_template("custom-assistant").await.unwrap();
+    assert!(client
+        .get_template("custom-assistant")
+        .await
+        .unwrap()
+        .is_none());
 }
