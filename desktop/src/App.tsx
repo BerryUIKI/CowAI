@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import ApprovalCards from "./ApprovalCards";
+import SettingsView from "./SettingsView";
 import TaskDetail from "./TaskDetail";
 import type { AssignmentWithEvents, RunWithCalls } from "./TaskDetail";
 import {
@@ -41,7 +42,7 @@ import type {
 } from "./types";
 import { approvalLevelLabel, taskStatusKind, taskStatusLabel } from "./types";
 
-type View = "channels" | "tasks" | "approvals";
+type View = "channels" | "tasks" | "approvals" | "settings";
 
 const approvalLevels: ApprovalLevel[] = ["ask", "safe_auto", "plan_only", "trusted"];
 
@@ -505,6 +506,14 @@ export default function App() {
             Approvals
             {approvals.length > 0 ? <span className="nav-count">{approvals.length}</span> : null}
           </button>
+          <button
+            type="button"
+            className="primary-nav-item"
+            aria-current={view === "settings" ? "page" : undefined}
+            onClick={() => setView("settings")}
+          >
+            Settings
+          </button>
         </nav>
 
         {view === "channels" ? (
@@ -898,12 +907,22 @@ export default function App() {
               </button>
             </div>
           )
-        ) : (
+        ) : view === "approvals" ? (
           <ApprovalCards
             approvals={approvals}
             tasks={tasks}
             decidingId={busy}
             onDecide={handleDecideApproval}
+          />
+        ) : (
+          <SettingsView
+            session={session}
+            agents={agents}
+            templates={templates}
+            templateId={templateId}
+            busy={busy}
+            onSelectTemplate={setTemplateId}
+            onAddAgents={handleAddAgents}
           />
         )}
       </main>
