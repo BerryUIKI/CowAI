@@ -17,6 +17,7 @@ use cow_core::identity::{UserId, Workspace};
 use cow_core::run::{Run, RunId, ToolCallRecord};
 use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
+use serde::Serialize;
 use tokio::sync::mpsc;
 
 mod local;
@@ -27,7 +28,7 @@ pub use local::LocalClient;
 ///
 /// Credentials never cross this boundary; a remote implementation receives a
 /// session token instead of a password hash.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ClientUser {
     pub id: UserId,
     pub name: String,
@@ -35,7 +36,7 @@ pub struct ClientUser {
 }
 
 /// The authenticated user and workspace a client operates in.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ClientSession {
     pub user: ClientUser,
     pub workspace: Workspace,
