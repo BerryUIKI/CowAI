@@ -15,6 +15,9 @@ cowbot-tools = { workspace = true }
 cowbot-llm = { workspace = true }
 cowbot-agent = { workspace = true }
 cowbot-client = { workspace = true }
+cowbot-package = { workspace = true }
+cowbot-service = { workspace = true }
+cowbot-store = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
