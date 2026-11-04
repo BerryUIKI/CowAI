@@ -1,23 +1,23 @@
 [workspace]
 members = [
-    "crates/cow-core",
-    "crates/cow-bus",
-    "crates/cow-tools",
-    "crates/cow-llm",
-    "crates/cow-agent",
-    "crates/cow-store",
-    "crates/cow-client",
-    "crates/cow-service",
-    "crates/cow-cli",
+    "crates/cowbot-core",
+    "crates/cowbot-bus",
+    "crates/cowbot-tools",
+    "crates/cowbot-llm",
+    "crates/cowbot-agent",
+    "crates/cowbot-store",
+    "crates/cowbot-client",
+    "crates/cowbot-service",
+    "crates/cowbot-cli",
 ]
 resolver = "2"
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
-authors = ["CowAI Contributors"]
+authors = ["CowBot Contributors"]
 license = "Apache-2.0"
-repository = "https://github.com/BerryUIKI/CowAI"
+repository = "https://github.com/BerryUIKI/CowBot"
 
 [workspace.dependencies]
 # Async & runtime
@@ -49,11 +49,11 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate"] }
 
 # Internal workspace crates
-cow-core = { path = "crates/cow-core" }
-cow-bus = { path = "crates/cow-bus" }
-cow-tools = { path = "crates/cow-tools" }
-cow-llm = { path = "crates/cow-llm" }
-cow-agent = { path = "crates/cow-agent" }
-cow-store = { path = "crates/cow-store" }
-cow-client = { path = "crates/cow-client" }
-cow-service = { path = "crates/cow-service" }
+cowbot-core = { path = "crates/cowbot-core" }
+cowbot-bus = { path = "crates/cowbot-bus" }
+cowbot-tools = { path = "crates/cowbot-tools" }
+cowbot-llm = { path = "crates/cowbot-llm" }
+cowbot-agent = { path = "crates/cowbot-agent" }
+cowbot-store = { path = "crates/cowbot-store" }
+cowbot-client = { path = "crates/cowbot-client" }
+cowbot-service = { path = "crates/cowbot-service" }

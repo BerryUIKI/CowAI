@@ -1,12 +1,12 @@
 [package]
-name = "cowai-desktop"
+name = "cowbot-desktop"
 version = "0.1.0"
-description = "CowAI desktop application"
+description = "CowBot desktop application"
 license = "Apache-2.0"
 edition = "2021"
 
 [lib]
-name = "cowai_desktop_lib"
+name = "cowbot_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]
@@ -14,7 +14,10 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
-cow-client = { path = "../../crates/cow-client" }
-cow-core = { path = "../../crates/cow-core" }
+cowbot-client = { path = "../../crates/cowbot-client" }
+cowbot-core = { path = "../../crates/cowbot-core" }
+
+[dev-dependencies]
+tempfile = "3"
 
 [workspace]
