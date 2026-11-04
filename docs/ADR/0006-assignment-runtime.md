@@ -8,7 +8,7 @@
 
 The current `Task` and `Crew` model is a flat, sequential pipeline: tasks run one after another, context is passed explicitly, and there is no persistent record of who asked for work, which parent task spawned it, how many attempts it took, or what should happen after a restart.
 
-OpenMausBot's runtime contract demonstrates the failure mode of a flat model: delegation, approvals, routines, restarts, and multiple wake paths eventually require a single job record, a single lifecycle, and an event log. CowAI does not need the full OpenMausBot rule set in v1, but it should adopt the core shape before Phase 1.4 is implemented.
+OpenMausBot's runtime contract demonstrates the failure mode of a flat model: delegation, approvals, routines, restarts, and multiple wake paths eventually require a single job record, a single lifecycle, and an event log. CowBot does not need the full OpenMausBot rule set in v1, but it should adopt the core shape before Phase 1.4 is implemented.
 
 ## Decision
 
@@ -102,5 +102,5 @@ Deferred:
 ## Alternatives
 
 - **Flat sequential tasks only**: simplest, but cannot represent delegation, restarts, or per-child approvals.
-- **Full OpenMausBot runtime contract**: validated by a mature product but far larger than CowAI's v1 scope.
+- **Full OpenMausBot runtime contract**: validated by a mature product but far larger than CowBot's v1 scope.
 - **External workflow engine (Temporal, etc.)**: heavy for a local-first desktop app and adds a service dependency.

@@ -6,7 +6,7 @@
 
 ## Context
 
-CowAI offers multiple approval modes (Ask / SafeAuto / PlanOnly / Trusted) and lets agents execute commands and modify files. Risk classification must be deterministic, auditable, and configurable; the safety boundary cannot be handed entirely to an LLM.
+CowBot offers multiple approval modes (Ask / SafeAuto / PlanOnly / Trusted) and lets agents execute commands and modify files. Risk classification must be deterministic, auditable, and configurable; the safety boundary cannot be handed entirely to an LLM.
 
 ## Decision
 

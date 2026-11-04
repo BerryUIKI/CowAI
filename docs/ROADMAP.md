@@ -1,4 +1,4 @@
-# CowAI Roadmap
+# CowBot Roadmap
 
 > **Status**: Draft v0.1
 > **Date**: 2026-11-03
@@ -49,7 +49,7 @@ Delivered:
 
 ## 4. Phase 1 — Local/Offline MVP (Desktop)
 
-**Goal**: a single user can install CowAI Desktop, create a workspace, assemble an agent team from templates, run a sequential task in a channel, approve risky tool calls, inspect deliverables, and export/import the workspace — all without a server.
+**Goal**: a single user can install CowBot Desktop, create a workspace, assemble an agent team from templates, run a sequential task in a channel, approve risky tool calls, inspect deliverables, and export/import the workspace — all without a server.
 
 ### 4.1 Milestones
 
@@ -92,7 +92,7 @@ Delivered:
 
 ## 5. Phase 2 — Self-Hosted Team Mode
 
-**Goal**: a small team can deploy CowAI Server, invite members, share workspaces and channels, and collaborate with agents under role-based permissions and audit.
+**Goal**: a small team can deploy CowBot Server, invite members, share workspaces and channels, and collaborate with agents under role-based permissions and audit.
 
 ### 5.1 Milestones
 
@@ -123,7 +123,7 @@ Delivered:
 
 ## 6. Phase 3 — Extensibility and Ecosystem
 
-**Goal**: make CowAI adaptable to more environments and workflows without compromising the secure, local-first core.
+**Goal**: make CowBot adaptable to more environments and workflows without compromising the secure, local-first core.
 
 ### 6.1 Workstreams
 

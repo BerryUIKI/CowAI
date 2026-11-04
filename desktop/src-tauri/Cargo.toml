@@ -2,6 +2,7 @@
 name = "cowai-desktop"
 version = "0.1.0"
 description = "CowAI desktop application"
+license = "Apache-2.0"
 edition = "2021"
 
 [lib]

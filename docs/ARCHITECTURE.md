@@ -1,4 +1,4 @@
-# CowAI Functional and System Architecture (Draft)
+# CowBot Functional and System Architecture (Draft)
 
 > **Status**: Draft v0.1 (to be confirmed section by section)
 > **Date**: 2026-11-03
@@ -255,4 +255,4 @@ Inspired by Claude Code's permission modes:
 
 ## 10. Design References
 
-External projects and the patterns CowAI adopts, defers, or rejects are recorded in `docs/REFERENCES.md` (CrewAI, Mattermost, and OpenMausBot). The most immediate candidate is a simplified assignment runtime for Phase 1.4, described there.
+External projects and the patterns CowBot adopts, defers, or rejects are recorded in `docs/REFERENCES.md` (CrewAI, Mattermost, and OpenMausBot). The most immediate candidate is a simplified assignment runtime for Phase 1.4, described there.
