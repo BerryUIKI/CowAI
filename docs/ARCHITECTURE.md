@@ -118,7 +118,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 ### 3.9 Access Layer
 
 - **Client abstraction**: `cow-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
-- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). The first slice covers local session bootstrap, channels/messages, and live events; tasks, approvals, agents/templates, and settings follow. All UI data access goes through `cow-client` via Tauri commands, never directly through `cow-store` or `cow-service`.
+- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It currently covers local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation), and approvals (list and decide). Agents/templates management, settings, and starting runs from the desktop follow. All UI data access goes through `cow-client` via Tauri commands, never directly through `cow-store` or `cow-service`.
 - **HTTP/WebSocket API**: `cow-server` serves desktop team mode, the CLI, and a future browser entry point.
 - **CLI**: `cowai` initializes and runs the local runtime through `cow-client`: `init` prepares the database and workspace, `run` executes the sequential crew through the assignment runtime with persisted history and interactive approval prompts. Channel collaboration and template-driven crews are not wired into the CLI yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.

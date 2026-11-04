@@ -6,6 +6,11 @@ core exclusively through `cow-client`. All data lives in `cowai.db` under the
 platform app-data directory, so the desktop app and the CLI can use separate
 databases without sharing state.
 
+The current UI has three views: **Channels** (channels and live messages),
+**Tasks** (create tasks, inspect assignment/run history, cancel), and
+**Approvals** (approve or reject tool calls requested by running agents).
+Starting task execution from the desktop is a follow-up slice.
+
 ## Prerequisites
 
 - Node.js 20+ and npm
