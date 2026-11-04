@@ -1,6 +1,9 @@
-use cow_client::{Client, LocalClient};
+use cow_client::{Client, LocalClient, NewTask};
+use cow_core::agent::AgentId;
+use cow_core::assignment::AssignmentStatus;
 use cow_core::channel::Sender;
 use cow_core::event::EventPayload;
+use cow_core::task::TaskStatus;
 use cow_core::template::TemplateDocument;
 
 #[tokio::test]
@@ -68,6 +71,36 @@ async fn local_client_streams_events() {
         EventPayload::MessagePosted(posted) => assert_eq!(posted.id, message.id),
         other => panic!("expected MessagePosted, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn local_client_creates_and_cancels_tasks() {
+    let client = LocalClient::open_in_memory().await.unwrap();
+    let agent = AgentId::new("agent-coder");
+
+    let task = client
+        .create_task(&NewTask::new("Implement login", "Working code", agent))
+        .await
+        .unwrap();
+    assert_eq!(task.status, TaskStatus::Pending);
+
+    let listed = client.list_tasks().await.unwrap();
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].id, task.id);
+
+    let assignments = client.list_assignments(&task.id).await.unwrap();
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].status, AssignmentStatus::Queued);
+
+    client
+        .cancel_task(&task.id, "no longer needed")
+        .await
+        .unwrap();
+
+    let stored = client.get_task(&task.id).await.unwrap().unwrap();
+    assert_eq!(stored.status, TaskStatus::Cancelled);
+    let assignments = client.list_assignments(&task.id).await.unwrap();
+    assert_eq!(assignments[0].status, AssignmentStatus::Cancelled);
 }
 
 #[tokio::test]

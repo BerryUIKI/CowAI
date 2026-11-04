@@ -3,17 +3,21 @@ use std::path::Path;
 use async_trait::async_trait;
 use cow_bus::EventBus;
 use cow_core::agent::AgentProfile;
+use cow_core::approval::{Approval, ApprovalId, ApprovalStatus};
+use cow_core::assignment::{Assignment, AssignmentRequester};
 use cow_core::channel::{Channel, ChannelId, ChannelMessage, Sender};
 use cow_core::error::{CowError, CowResult};
+use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
 use cow_service::{
-    bootstrap_local, ApprovalService, AssignmentService, ChannelService, TemplateService,
+    bootstrap_local, ApprovalService, AssignmentService, ChannelService, TaskService,
+    TemplateService,
 };
 use cow_store::Store;
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
-use crate::{Client, ClientSession, ClientUser, EventStream};
+use crate::{Client, ClientSession, ClientUser, EventStream, NewTask};
 
 /// In-process client backed by `cow-store` and `cow-service`.
 pub struct LocalClient {
@@ -22,6 +26,9 @@ pub struct LocalClient {
     session: ClientSession,
     channels: ChannelService,
     templates: TemplateService,
+    tasks: TaskService,
+    assignments: AssignmentService,
+    approvals: ApprovalService,
 }
 
 impl LocalClient {
@@ -41,15 +48,15 @@ impl LocalClient {
         store.migrate().await?;
         let context = bootstrap_local(&store).await?;
 
-        AssignmentService::new(store.clone(), bus.clone())
-            .reconcile_on_startup()
-            .await?;
-        ApprovalService::new(store.clone(), bus.clone(), context.workspace.id.clone())
-            .reconcile_on_startup()
-            .await?;
+        let assignments = AssignmentService::new(store.clone(), bus.clone());
+        assignments.reconcile_on_startup().await?;
+        let approvals =
+            ApprovalService::new(store.clone(), bus.clone(), context.workspace.id.clone());
+        approvals.reconcile_on_startup().await?;
 
         let channels = ChannelService::new(store.clone(), bus.clone());
         let templates = TemplateService::new(store.clone());
+        let tasks = TaskService::new(store.clone(), bus.clone());
         let session = ClientSession {
             user: ClientUser {
                 id: context.user.id,
@@ -65,6 +72,9 @@ impl LocalClient {
             session,
             channels,
             templates,
+            tasks,
+            assignments,
+            approvals,
         })
     }
 
@@ -148,6 +158,56 @@ impl Client for LocalClient {
         self.channels.list_messages(channel_id, limit).await
     }
 
+    async fn create_task(&self, task: &NewTask) -> CowResult<Task> {
+        let model = Task::new(task.description.clone(), task.expected_output.clone())
+            .assign_to(task.assignee.clone());
+        self.tasks
+            .create(
+                &self.session.workspace.id,
+                task.channel_id.as_ref(),
+                &model,
+                AssignmentRequester::User(self.session.user.id.0.clone()),
+                task.approval_level,
+            )
+            .await?;
+        Ok(model)
+    }
+
+    async fn list_tasks(&self) -> CowResult<Vec<Task>> {
+        self.tasks.list(&self.session.workspace.id).await
+    }
+
+    async fn get_task(&self, task_id: &TaskId) -> CowResult<Option<Task>> {
+        self.tasks.get(task_id).await
+    }
+
+    async fn cancel_task(&self, task_id: &TaskId, reason: &str) -> CowResult<()> {
+        self.tasks.cancel(task_id, reason).await
+    }
+
+    async fn list_assignments(&self, task_id: &TaskId) -> CowResult<Vec<Assignment>> {
+        self.assignments.list_for_task(task_id).await
+    }
+
+    async fn pending_approvals(&self) -> CowResult<Vec<Approval>> {
+        self.approvals.pending_for_workspace().await
+    }
+
+    async fn decide_approval(
+        &self,
+        approval_id: &ApprovalId,
+        approved: bool,
+    ) -> CowResult<Approval> {
+        let status = if approved {
+            ApprovalStatus::Approved
+        } else {
+            ApprovalStatus::Rejected
+        };
+        self.approvals
+            .decide(approval_id, status, &self.session.user.id.0)
+            .await
+    }
+
     async fn list_templates(&self) -> CowResult<Vec<TemplateDocument>> {
         self.templates.list().await
     }
@@ -219,5 +279,34 @@ mod tests {
         let stored = store.get_approval(&approval.id).await.unwrap().unwrap();
         assert_eq!(stored.status, ApprovalStatus::Expired);
         assert_eq!(client.session().await.unwrap().user.name, "Local Owner");
+    }
+
+    #[tokio::test]
+    async fn client_lists_and_decides_pending_approvals() {
+        let store = Store::connect_in_memory().await.unwrap();
+        let client = LocalClient::initialize(store, EventBus::default_bus())
+            .await
+            .unwrap();
+        let workspace_id = client.session().await.unwrap().workspace.id;
+        let task = Task::new("Approval task", "Output");
+        client
+            .store
+            .create_task(&workspace_id, None, &task)
+            .await
+            .unwrap();
+        let approval = Approval::new(task.id.clone(), "call-1");
+        client.store.create_approval(&approval).await.unwrap();
+
+        let pending = client.pending_approvals().await.unwrap();
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].id, approval.id);
+
+        let decided = client.decide_approval(&approval.id, true).await.unwrap();
+        assert_eq!(decided.status, ApprovalStatus::Approved);
+        assert_eq!(
+            decided.decided_by,
+            Some(client.session().await.unwrap().user.id.0)
+        );
+        assert!(client.pending_approvals().await.unwrap().is_empty());
     }
 }

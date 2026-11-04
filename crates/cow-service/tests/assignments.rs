@@ -6,7 +6,7 @@ use cow_core::assignment::{
     AssignmentRequester, AssignmentStatus, ReplyMode,
 };
 use cow_core::identity::WorkspaceId;
-use cow_core::task::Task;
+use cow_core::task::{Task, TaskStatus};
 use cow_service::{bootstrap_local, AssignmentService};
 use cow_store::Store;
 
@@ -59,6 +59,10 @@ async fn assignment_lifecycle_records_events() {
     let started = service.start(&assignment.id).await.unwrap();
     assert_eq!(started.status, AssignmentStatus::Running);
     assert_eq!(started.executions, 1);
+    assert_eq!(
+        store.get_task(&task.id).await.unwrap().unwrap().status,
+        TaskStatus::InProgress
+    );
 
     let waiting = service.mark_waiting(&assignment.id).await.unwrap();
     assert_eq!(waiting.status, AssignmentStatus::Waiting);
@@ -80,6 +84,12 @@ async fn assignment_lifecycle_records_events() {
         }
         other => panic!("expected completed outcome, got {other:?}"),
     }
+    assert_eq!(
+        store.get_task(&task.id).await.unwrap().unwrap().status,
+        TaskStatus::Completed {
+            output: "Login implemented".to_string()
+        }
+    );
 
     let events = service.events(&assignment.id).await.unwrap();
     let kinds: Vec<_> = events.iter().map(|event| event.kind).collect();
@@ -217,6 +227,10 @@ async fn cancellation_cascades_to_descendants() {
         let assignment = service.get(id).await.unwrap().unwrap();
         assert_eq!(assignment.status, AssignmentStatus::Cancelled);
     }
+    for task in [&root_task, &child_task, &grandchild_task] {
+        let stored = store.get_task(&task.id).await.unwrap().unwrap();
+        assert_eq!(stored.status, TaskStatus::Cancelled);
+    }
     let child_events = service.events(&child.id).await.unwrap();
     assert!(child_events
         .iter()
@@ -349,6 +363,12 @@ async fn execution_budget_failure_is_persisted() {
 
     let failed = service.get(&assignment.id).await.unwrap().unwrap();
     assert_eq!(failed.status, AssignmentStatus::Failed);
+    assert_eq!(
+        store.get_task(&task.id).await.unwrap().unwrap().status,
+        TaskStatus::Failed {
+            error: "execution budget exhausted".to_string()
+        }
+    );
     let events = service.events(&assignment.id).await.unwrap();
     assert!(events
         .iter()

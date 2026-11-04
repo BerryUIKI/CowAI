@@ -8,7 +8,7 @@ use cow_core::assignment::{
 };
 use cow_core::error::{CowError, CowResult};
 use cow_core::event::{Event, EventPayload};
-use cow_core::task::{Task, TaskId};
+use cow_core::task::{Task, TaskId, TaskStatus};
 use cow_store::Store;
 
 /// Application service that owns assignment lifecycle transitions.
@@ -136,6 +136,14 @@ impl AssignmentService {
                     Some("execution budget exhausted".to_string()),
                 )
                 .await?;
+            self.store
+                .update_task_status(
+                    &assignment.task_id,
+                    &TaskStatus::Failed {
+                        error: "execution budget exhausted".to_string(),
+                    },
+                )
+                .await?;
             return Err(CowError::Task(format!(
                 "execution budget exhausted for root '{}'",
                 assignment.root_id
@@ -147,6 +155,9 @@ impl AssignmentService {
         assignment.updated_at = Utc::now();
         self.store
             .save_assignment(&assignment, AssignmentEventKind::Started, None)
+            .await?;
+        self.store
+            .update_task_status(&assignment.task_id, &TaskStatus::InProgress)
             .await?;
         Ok(assignment)
     }
@@ -227,6 +238,14 @@ impl AssignmentService {
         self.store
             .save_assignment(&assignment, AssignmentEventKind::Completed, None)
             .await?;
+        self.store
+            .update_task_status(
+                &assignment.task_id,
+                &TaskStatus::Completed {
+                    output: output.clone(),
+                },
+            )
+            .await?;
         let _ = self.bus.publish(Event::new(EventPayload::TaskCompleted {
             task_id: assignment.task_id.clone(),
             output,
@@ -251,6 +270,14 @@ impl AssignmentService {
         assignment.updated_at = Utc::now();
         self.store
             .save_assignment(&assignment, AssignmentEventKind::Failed, None)
+            .await?;
+        self.store
+            .update_task_status(
+                &assignment.task_id,
+                &TaskStatus::Failed {
+                    error: error.clone(),
+                },
+            )
             .await?;
         let _ = self.bus.publish(Event::new(EventPayload::TaskFailed {
             task_id: assignment.task_id.clone(),
@@ -284,6 +311,9 @@ impl AssignmentService {
                             AssignmentEventKind::Cancelled,
                             Some(reason.clone()),
                         )
+                        .await?;
+                    self.store
+                        .update_task_status(&assignment.task_id, &TaskStatus::Cancelled)
                         .await?;
                 }
             }
@@ -333,6 +363,14 @@ impl AssignmentService {
                         &assignment,
                         AssignmentEventKind::Failed,
                         Some("restart: interrupted".to_string()),
+                    )
+                    .await?;
+                self.store
+                    .update_task_status(
+                        &assignment.task_id,
+                        &TaskStatus::Failed {
+                            error: "interrupted after restart".to_string(),
+                        },
                     )
                     .await?;
             }
@@ -457,6 +495,14 @@ impl AssignmentService {
                     &parent,
                     AssignmentEventKind::BudgetExhausted,
                     Some("wake budget exhausted".to_string()),
+                )
+                .await?;
+            self.store
+                .update_task_status(
+                    &parent.task_id,
+                    &TaskStatus::Failed {
+                        error: "wake budget exhausted".to_string(),
+                    },
                 )
                 .await?;
             return Ok(());

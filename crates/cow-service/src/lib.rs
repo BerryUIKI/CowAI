@@ -8,6 +8,7 @@ mod assignments;
 mod bootstrap;
 mod channels;
 mod crew_runner;
+mod task_service;
 mod templates;
 
 pub use approvals::{decision_for, ApprovalDecision, ApprovalService, ScopedApprovalGate};
@@ -15,4 +16,5 @@ pub use assignments::AssignmentService;
 pub use bootstrap::{bootstrap_local, bootstrap_local_named, LocalContext};
 pub use channels::ChannelService;
 pub use crew_runner::CrewRunner;
+pub use task_service::TaskService;
 pub use templates::{builtin_templates, TemplateService};
