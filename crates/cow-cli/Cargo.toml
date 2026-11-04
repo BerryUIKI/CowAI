@@ -11,10 +11,10 @@ path = "src/main.rs"
 
 [dependencies]
 cow-core = { workspace = true }
-cow-bus = { workspace = true }
 cow-tools = { workspace = true }
 cow-llm = { workspace = true }
 cow-agent = { workspace = true }
+cow-client = { workspace = true }
 tokio = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }

@@ -1,10 +1,14 @@
+use std::collections::HashMap;
 use std::path::Path;
 
 use async_trait::async_trait;
+use cow_agent::Crew;
 use cow_bus::EventBus;
 use cow_core::agent::AgentProfile;
-use cow_core::approval::{Approval, ApprovalId, ApprovalStatus};
-use cow_core::assignment::{Assignment, AssignmentEvent, AssignmentId, AssignmentRequester};
+use cow_core::approval::{Approval, ApprovalId, ApprovalLevel, ApprovalStatus};
+use cow_core::assignment::{
+    Assignment, AssignmentEvent, AssignmentId, AssignmentOrigin, AssignmentRequester,
+};
 use cow_core::audit::AuditEvent;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage, Sender};
 use cow_core::error::{CowError, CowResult};
@@ -12,7 +16,7 @@ use cow_core::run::{Run, RunId, ToolCallRecord};
 use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
 use cow_service::{
-    bootstrap_local, ApprovalService, AssignmentService, ChannelService, TaskService,
+    bootstrap_local, ApprovalService, AssignmentService, ChannelService, CrewRunner, TaskService,
     TemplateService,
 };
 use cow_store::Store;
@@ -82,6 +86,26 @@ impl LocalClient {
 
     fn user_sender(&self) -> Sender {
         Sender::User(self.session.user.id.0.clone())
+    }
+
+    /// Execute a sequential crew through the local assignment runtime.
+    ///
+    /// Local-only: the crew carries in-process LLM and tool handles, so remote
+    /// execution needs a server-side API (Phase 2.3) rather than this method.
+    pub async fn run_crew(
+        &self,
+        crew: &mut Crew,
+        approval_level: ApprovalLevel,
+    ) -> CowResult<HashMap<TaskId, String>> {
+        CrewRunner::new(self.store.clone(), self.bus.clone())
+            .run(
+                crew,
+                &self.session.workspace.id,
+                AssignmentRequester::User(self.session.user.id.0.clone()),
+                AssignmentOrigin::User,
+                approval_level,
+            )
+            .await
     }
 }
 

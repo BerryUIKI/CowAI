@@ -1,13 +1,16 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use cow_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
-use cow_bus::EventBus;
+use cow_client::{Client, LocalClient};
+use cow_core::approval::ApprovalLevel;
 use cow_core::event::EventPayload;
 use cow_core::task::Task;
 use cow_llm::{LlmProvider, MockLlmProvider, OpenAiCompatibleProvider};
 use cow_tools::{
     CodeExecutionTool, ReadFileTool, SandboxBackend, SubprocessSandbox, ToolRegistry, WriteFileTool,
 };
+use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, BufReader, Lines};
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -26,6 +29,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize the local database and workspace
+    Init {
+        /// SQLite database path
+        #[arg(long, env = "COWAI_DB")]
+        db: Option<PathBuf>,
+    },
+
     /// Run an autonomous multi-agent crew on an engineering task
     Run {
         /// The objective or task prompt to execute
@@ -47,10 +57,41 @@ enum Commands {
         /// Use mock LLM provider for local dry-run testing
         #[arg(long)]
         dry_run: bool,
+
+        /// SQLite database path
+        #[arg(long, env = "COWAI_DB")]
+        db: Option<PathBuf>,
+
+        /// Approval policy for tool calls
+        #[arg(long, value_enum, default_value = "ask")]
+        approval: ApprovalLevelArg,
     },
 
     /// Inspect registered tools and test sandbox code execution
     Tools,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ApprovalLevelArg {
+    Ask,
+    SafeAuto,
+    PlanOnly,
+    Trusted,
+}
+
+impl From<ApprovalLevelArg> for ApprovalLevel {
+    fn from(value: ApprovalLevelArg) -> Self {
+        match value {
+            ApprovalLevelArg::Ask => ApprovalLevel::Ask,
+            ApprovalLevelArg::SafeAuto => ApprovalLevel::SafeAuto,
+            ApprovalLevelArg::PlanOnly => ApprovalLevel::PlanOnly,
+            ApprovalLevelArg::Trusted => ApprovalLevel::Trusted,
+        }
+    }
+}
+
+fn database_path(db: Option<PathBuf>) -> PathBuf {
+    db.unwrap_or_else(|| PathBuf::from("cowai.db"))
 }
 
 #[tokio::main]
@@ -70,19 +111,43 @@ async fn main() -> anyhow::Result<()> {
     let _ = tracing::subscriber::set_global_default(subscriber);
 
     match cli.command {
+        Commands::Init { db } => {
+            initialize(db).await?;
+        }
         Commands::Run {
             task,
             model,
             base_url,
             api_key,
             dry_run,
+            db,
+            approval,
         } => {
-            run_crew(task, model, base_url, api_key, dry_run).await?;
+            run_crew(task, model, base_url, api_key, dry_run, db, approval).await?;
         }
         Commands::Tools => {
             inspect_tools().await?;
         }
     }
+
+    Ok(())
+}
+
+async fn initialize(db: Option<PathBuf>) -> anyhow::Result<()> {
+    let path = database_path(db);
+    let client = LocalClient::open(&path).await?;
+    let session = client.session().await?;
+
+    println!("CowAI local workspace ready");
+    println!("  database:  {}", path.display());
+    println!(
+        "  owner:     {} <{}>",
+        session.user.name, session.user.email
+    );
+    println!(
+        "  workspace: {} ({})",
+        session.workspace.name, session.workspace.id
+    );
 
     Ok(())
 }
@@ -93,19 +158,28 @@ async fn run_crew(
     base_url: Option<String>,
     api_key: Option<String>,
     dry_run: bool,
+    db: Option<PathBuf>,
+    approval: ApprovalLevelArg,
 ) -> anyhow::Result<()> {
+    let path = database_path(db);
+    let client = Arc::new(LocalClient::open(&path).await?);
+    let session = client.session().await?;
+
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║       🐄 CowAI Multi-Agent Collaboration Platform        ║");
     println!("╚══════════════════════════════════════════════════════════════╝\n");
     println!("Objective: {}\n", task_prompt);
+    println!("Database:  {}", path.display());
+    println!("Workspace: {}\n", session.workspace.name);
 
-    // Initialize Event Bus
-    let bus = EventBus::default_bus();
-    let mut rx = bus.subscribe();
+    let mut rx = client.subscribe();
+    let approval_client = Arc::clone(&client);
 
-    // Spawn event listener to print live platform activities
-    tokio::spawn(async move {
-        while let Ok(event) = rx.recv().await {
+    // Print live events and prompt for approvals while the crew runs.
+    let listener = tokio::spawn(async move {
+        let mut stdin = BufReader::new(tokio::io::stdin()).lines();
+
+        while let Some(event) = rx.recv().await {
             match event.payload {
                 EventPayload::TaskCreated(t) => {
                     println!("[TASK CREATED] {}", t.description);
@@ -139,6 +213,30 @@ async fn run_crew(
                 }
                 EventPayload::TaskFailed { task_id: _, error } => {
                     println!("\n❌ [TASK FAILED]: {}", error);
+                }
+                EventPayload::ApprovalRequested {
+                    approval,
+                    risk,
+                    reason,
+                } => {
+                    println!("\n🔐 Approval required: {}", reason);
+                    println!(
+                        "   risk: {}, tool call: {}, task: {}",
+                        risk.as_str(),
+                        approval.tool_call_id,
+                        approval.task_id
+                    );
+                    let approved = prompt_approval(&mut stdin).await;
+                    match approval_client
+                        .decide_approval(&approval.id, approved)
+                        .await
+                    {
+                        Ok(_) => println!(
+                            "   decision: {}\n",
+                            if approved { "approved" } else { "rejected" }
+                        ),
+                        Err(err) => eprintln!("Failed to record approval decision: {err}"),
+                    }
                 }
                 _ => {}
             }
@@ -210,8 +308,10 @@ async fn run_crew(
     crew.add_task(code_task);
     crew.add_task(review_task);
 
-    // Execute!
-    let results = crew.kickoff(&bus).await?;
+    // Execute through the local client so tasks, assignments, runs, tool
+    // calls, approvals, and audit records are persisted.
+    let results = client.run_crew(&mut crew, approval.into()).await?;
+    listener.abort();
 
     println!("\n╔══════════════════════════════════════════════════════════════╗");
     println!("║                    Execution Summary                         ║");
@@ -219,8 +319,26 @@ async fn run_crew(
     for (task_id, output) in results {
         println!("\nTask ID: {}\nDeliverable:\n{}", task_id, output);
     }
+    println!("\nHistory persisted to {}.", path.display());
 
     Ok(())
+}
+
+async fn prompt_approval<R>(lines: &mut Lines<R>) -> bool
+where
+    R: AsyncBufRead + Unpin,
+{
+    loop {
+        println!("Approve this tool call? [y/N]");
+        match lines.next_line().await {
+            Ok(Some(line)) => match line.trim().to_lowercase().as_str() {
+                "y" | "yes" => return true,
+                "n" | "no" | "" => return false,
+                _ => println!("Please answer y or n."),
+            },
+            _ => return false,
+        }
+    }
 }
 
 async fn inspect_tools() -> anyhow::Result<()> {
