@@ -6,11 +6,14 @@
 //! directly (ADR-0001, ADR-0007).
 
 use async_trait::async_trait;
-use cow_core::agent::AgentProfile;
+use cow_core::agent::{AgentId, AgentProfile};
+use cow_core::approval::{Approval, ApprovalId, ApprovalLevel};
+use cow_core::assignment::Assignment;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage};
 use cow_core::error::CowResult;
 use cow_core::event::Event;
 use cow_core::identity::{UserId, Workspace};
+use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
 use tokio::sync::mpsc;
 
@@ -34,6 +37,42 @@ pub struct ClientUser {
 pub struct ClientSession {
     pub user: ClientUser,
     pub workspace: Workspace,
+}
+
+/// Parameters for creating a task and its root assignment.
+#[derive(Debug, Clone)]
+pub struct NewTask {
+    pub description: String,
+    pub expected_output: String,
+    pub assignee: AgentId,
+    pub channel_id: Option<ChannelId>,
+    pub approval_level: ApprovalLevel,
+}
+
+impl NewTask {
+    pub fn new(
+        description: impl Into<String>,
+        expected_output: impl Into<String>,
+        assignee: AgentId,
+    ) -> Self {
+        Self {
+            description: description.into(),
+            expected_output: expected_output.into(),
+            assignee,
+            channel_id: None,
+            approval_level: ApprovalLevel::Ask,
+        }
+    }
+
+    pub fn in_channel(mut self, channel_id: ChannelId) -> Self {
+        self.channel_id = Some(channel_id);
+        self
+    }
+
+    pub fn with_approval_level(mut self, approval_level: ApprovalLevel) -> Self {
+        self.approval_level = approval_level;
+        self
+    }
 }
 
 /// A live stream of platform events for the UI.
@@ -79,6 +118,19 @@ pub trait Client: Send + Sync {
         channel_id: &ChannelId,
         limit: u32,
     ) -> CowResult<Vec<ChannelMessage>>;
+
+    async fn create_task(&self, task: &NewTask) -> CowResult<Task>;
+    async fn list_tasks(&self) -> CowResult<Vec<Task>>;
+    async fn get_task(&self, task_id: &TaskId) -> CowResult<Option<Task>>;
+    async fn cancel_task(&self, task_id: &TaskId, reason: &str) -> CowResult<()>;
+    async fn list_assignments(&self, task_id: &TaskId) -> CowResult<Vec<Assignment>>;
+
+    async fn pending_approvals(&self) -> CowResult<Vec<Approval>>;
+    async fn decide_approval(
+        &self,
+        approval_id: &ApprovalId,
+        approved: bool,
+    ) -> CowResult<Approval>;
 
     async fn list_templates(&self) -> CowResult<Vec<TemplateDocument>>;
     async fn get_template(&self, id: &str) -> CowResult<Option<TemplateDocument>>;
