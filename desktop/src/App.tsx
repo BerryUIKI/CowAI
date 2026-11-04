@@ -21,8 +21,10 @@ import {
   listTemplates,
   listToolCalls,
   onCowbotEvent,
+  onRunFinished,
   pendingApprovals,
   postMessage,
+  runTask,
 } from "./api";
 import icon from "./assets/cowbot-icon.svg";
 import wordmark from "./assets/cowbot-wordmark-dark.svg";
@@ -89,6 +91,7 @@ export default function App() {
   const [taskApproval, setTaskApproval] = useState<ApprovalLevel>("ask");
   const [templateId, setTemplateId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
+  const [runningTasks, setRunningTasks] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
@@ -282,6 +285,39 @@ export default function App() {
   ]);
 
   useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    onRunFinished((event) => {
+      setRunningTasks((current) => {
+        const next = new Set(current);
+        next.delete(event.task_id);
+        return next;
+      });
+      if (!event.ok && event.error) {
+        setError(event.error);
+      }
+      refreshTasks().catch((err) => setError(errorMessage(err)));
+      if (selectedTaskId) {
+        refreshTaskDetail(selectedTaskId).catch((err) => setError(errorMessage(err)));
+      }
+    })
+      .then((stop) => {
+        if (cancelled) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      })
+      .catch((err) => setError(errorMessage(err)));
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [refreshTaskDetail, refreshTasks, selectedTaskId]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
@@ -399,6 +435,22 @@ export default function App() {
       setError(errorMessage(err));
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function handleRunTask(taskId: string) {
+    setError(null);
+    setRunningTasks((current) => new Set(current).add(taskId));
+    try {
+      await runTask(taskId, taskApproval);
+      await refreshTasks();
+    } catch (err) {
+      setRunningTasks((current) => {
+        const next = new Set(current);
+        next.delete(taskId);
+        return next;
+      });
+      setError(errorMessage(err));
     }
   }
 
@@ -834,6 +886,8 @@ export default function App() {
               runs={taskRuns}
               cancelling={busy === "cancel-task"}
               onCancel={handleCancelTask}
+              running={runningTasks.has(selectedTask.id)}
+              onRun={() => handleRunTask(selectedTask.id)}
             />
           ) : (
             <div className="empty-workspace">

@@ -25,6 +25,8 @@ interface TaskDetailProps {
   runs: RunWithCalls[];
   cancelling: boolean;
   onCancel: () => void;
+  running: boolean;
+  onRun: () => void;
 }
 
 function outcomeText(outcome: AssignmentOutcome): string {
@@ -56,9 +58,12 @@ export default function TaskDetail({
   runs,
   cancelling,
   onCancel,
+  running,
+  onRun,
 }: TaskDetailProps) {
   const kind = taskStatusKind(task.status);
-  const canCancel = kind === "pending" || kind === "in_progress";
+  const canCancel = (kind === "pending" || kind === "in_progress") && !running;
+  const canRun = kind === "pending" && !running;
   const approvalLevel = assignments[0]
     ? approvalLevelLabel(assignments[0].assignment.approval_level)
     : "—";
@@ -77,16 +82,28 @@ export default function TaskDetail({
             {task.expected_output}
           </p>
         </div>
-        {canCancel ? (
-          <button
-            type="button"
-            className="danger-button"
-            onClick={onCancel}
-            disabled={cancelling}
-          >
-            {cancelling ? "Cancelling…" : "Cancel task"}
-          </button>
-        ) : null}
+        <div className="task-actions">
+          {canRun || running ? (
+            <button
+              type="button"
+              className="primary-button"
+              onClick={onRun}
+              disabled={running}
+            >
+              {running ? "Running…" : "Run task"}
+            </button>
+          ) : null}
+          {canCancel || kind === "pending" ? (
+            <button
+              type="button"
+              className="danger-button"
+              onClick={onCancel}
+              disabled={cancelling || running}
+            >
+              {cancelling ? "Cancelling…" : "Cancel task"}
+            </button>
+          ) : null}
+        </div>
       </header>
 
       <dl className="task-meta">
