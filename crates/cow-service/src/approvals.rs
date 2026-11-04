@@ -91,7 +91,7 @@ impl ApprovalService {
             ApprovalDecision::AutoApprove => {
                 self.record_audit(&agent_id.0, "tool.auto_approved", call, &assessment)
                     .await?;
-                Ok(ToolAuthorization::Approved)
+                Ok(ToolAuthorization::Approved { approved_by: None })
             }
             ApprovalDecision::Deny => {
                 self.record_audit(&agent_id.0, "tool.denied", call, &assessment)
@@ -125,14 +125,15 @@ impl ApprovalService {
                 };
                 match decided.status {
                     ApprovalStatus::Approved => {
+                        let approved_by = decided.decided_by.clone();
                         self.record_audit(
-                            decided.decided_by.as_deref().unwrap_or("unknown"),
+                            approved_by.as_deref().unwrap_or("unknown"),
                             "tool.approval_approved",
                             call,
                             &assessment,
                         )
                         .await?;
-                        Ok(ToolAuthorization::Approved)
+                        Ok(ToolAuthorization::Approved { approved_by })
                     }
                     ApprovalStatus::Rejected => {
                         let decided_by =

@@ -111,7 +111,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 
 - `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
 - Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, assignments, assignment events, runs, tool calls, approvals, and audit events.
-- The crew runner records a `Run` per task attempt and a `ToolCallRecord` per tool call, including its arguments and result, so the desktop UI can read per-run tool history.
+- The crew runner records a `Run` per task attempt and a `ToolCallRecord` per tool call, including its arguments, result, and — for human-approved calls — the deciding actor in `tool_calls.approved_by`, so the desktop UI can read per-run tool history.
 - Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart; the startup sweep covers rows left behind when the waiting process died.
 
 ### 3.9 Access Layer
