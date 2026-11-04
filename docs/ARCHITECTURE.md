@@ -93,7 +93,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - `SandboxBackend`: local subprocess in v1; Docker in P1; WASM evaluated in P2.
 - Resource limits: timeout, output truncation, working-directory restriction, environment-variable filtering.
 - Static risk classifier (`StaticRiskClassifier`): grades every tool call as `ReadOnly`, `Low`, `Medium`, `High`, or `Critical` using deterministic rules; unknown tools default to `High`.
-- Approval gate: `ToolGate` is consulted before every tool execution. `cow-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events. Only one decision is accepted per approval: `decide_approval` updates pending rows exclusively, so concurrent reviewers cannot overwrite each other. When the wait times out the approval is persisted as `expired` and the tool call is denied.
+- Approval gate: `ToolGate` is consulted before every tool execution. `cow-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events. Only one decision is accepted per approval: `decide_approval` updates pending rows exclusively, so concurrent reviewers cannot overwrite each other. When the wait times out the approval is persisted as `expired` and the tool call is denied. Approvals left pending by a previous process are expired on startup by `ApprovalService::reconcile_on_startup`.
 
 ### 3.6 Model Gateway
 
@@ -112,7 +112,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
 - Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, assignments, assignment events, runs, tool calls, approvals, and audit events.
 - Repository methods exist for runs and tool calls, but the Phase 1.4/1.5 runtime does not yet write them; that gap must close before the desktop UI can show per-run tool history.
-- Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart.
+- Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart; the startup sweep covers rows left behind when the waiting process died.
 
 ### 3.9 Access Layer
 

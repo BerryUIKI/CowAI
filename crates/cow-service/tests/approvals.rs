@@ -2,12 +2,13 @@ use std::time::Duration;
 
 use cow_bus::EventBus;
 use cow_core::agent::AgentId;
-use cow_core::approval::{ApprovalLevel, ApprovalStatus};
+use cow_core::approval::{Approval, ApprovalLevel, ApprovalStatus};
 use cow_core::assignment::{
     Assignment, AssignmentMode, AssignmentOrigin, AssignmentRequester, ReplyMode,
 };
-use cow_core::identity::WorkspaceId;
+use cow_core::identity::{Workspace, WorkspaceId};
 use cow_core::risk::RiskLevel;
+use cow_core::task::Task;
 use cow_core::tool::ToolAuthorization;
 use cow_core::tool::ToolCall;
 use cow_service::{bootstrap_local, decision_for, ApprovalDecision, ApprovalService};
@@ -302,4 +303,57 @@ async fn pending_approval_rejected_denies_the_tool() {
         ToolAuthorization::Denied { reason } => assert!(reason.contains("rejected")),
         other => panic!("expected denied, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn startup_reconciliation_expires_orphaned_pending_approvals() {
+    let (store, service, assignment, _agent, workspace_id) =
+        setup(ApprovalLevel::Ask, Duration::from_secs(2)).await;
+
+    let orphan = Approval::new(assignment.task_id.clone(), "call-orphan");
+    store.create_approval(&orphan).await.unwrap();
+
+    let decided = Approval::new(assignment.task_id.clone(), "call-decided");
+    store.create_approval(&decided).await.unwrap();
+    service
+        .decide(&decided.id, ApprovalStatus::Approved, "user-1")
+        .await
+        .unwrap();
+
+    let other_workspace = Workspace::new("Other Workspace");
+    store.create_workspace(&other_workspace).await.unwrap();
+    let other_task = Task::new("Other task", "Other output");
+    store
+        .create_task(&other_workspace.id, None, &other_task)
+        .await
+        .unwrap();
+    let other_approval = Approval::new(other_task.id.clone(), "call-other");
+    store.create_approval(&other_approval).await.unwrap();
+
+    let expired = service.reconcile_on_startup().await.unwrap();
+    assert_eq!(expired, 1);
+
+    let stored = store.get_approval(&orphan.id).await.unwrap().unwrap();
+    assert_eq!(stored.status, ApprovalStatus::Expired);
+    assert_eq!(stored.decided_by.as_deref(), Some("system"));
+    assert!(store
+        .list_pending_approvals(&assignment.task_id)
+        .await
+        .unwrap()
+        .is_empty());
+
+    let stored = store.get_approval(&decided.id).await.unwrap().unwrap();
+    assert_eq!(stored.status, ApprovalStatus::Approved);
+
+    let untouched = store
+        .get_approval(&other_approval.id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(untouched.status, ApprovalStatus::Pending);
+
+    let events = store.list_audit_events(&workspace_id, 50).await.unwrap();
+    assert!(events.iter().any(|event| {
+        event.action == "tool.approval_expired" && event.target.contains("call-orphan")
+    }));
 }

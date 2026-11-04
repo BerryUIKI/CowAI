@@ -397,4 +397,22 @@ impl Store {
         .map_err(db)?;
         rows.into_iter().map(ApprovalRow::into_domain).collect()
     }
+
+    pub async fn list_pending_approvals_for_workspace(
+        &self,
+        workspace_id: &WorkspaceId,
+    ) -> CowResult<Vec<Approval>> {
+        let rows = sqlx::query_as::<_, ApprovalRow>(
+            "SELECT a.id, a.task_id, a.tool_call_id, a.status, a.decided_by, a.decided_at, a.created_at
+             FROM approvals a
+             JOIN tasks t ON t.id = a.task_id
+             WHERE a.status = 'pending' AND t.workspace_id = ?
+             ORDER BY a.created_at",
+        )
+        .bind(&workspace_id.0)
+        .fetch_all(self.pool())
+        .await
+        .map_err(db)?;
+        rows.into_iter().map(ApprovalRow::into_domain).collect()
+    }
 }
