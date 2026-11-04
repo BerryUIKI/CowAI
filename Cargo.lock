@@ -318,6 +318,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cow-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "cow-bus",
+ "cow-core",
+ "cow-service",
+ "cow-store",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "cow-core"
 version = "0.1.0"
 dependencies = [
