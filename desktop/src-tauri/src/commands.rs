@@ -1,3 +1,4 @@
+use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
 use cowbot_client::{Client, NewTask};
 use cowbot_core::agent::{AgentId, AgentProfile};
 use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
@@ -6,9 +7,18 @@ use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
 use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
-use tauri::State;
+use serde::Serialize;
+use tauri::{Emitter, Manager, State};
 
 use crate::AppState;
+
+/// Payload emitted on `cowbot-run-finished` when a crew run settles.
+#[derive(Debug, Clone, Serialize)]
+pub struct RunFinished {
+    pub task_id: String,
+    pub ok: bool,
+    pub error: Option<String>,
+}
 
 #[tauri::command]
 pub async fn get_session(
@@ -120,6 +130,117 @@ pub async fn create_task(
         .create_task(&task)
         .await
         .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn run_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+    approval_level: String,
+) -> Result<(), String> {
+    let approval_level = parse_approval_level(&approval_level)?;
+    let task = state
+        .client
+        .get_task(&TaskId::new(task_id.clone()))
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("task '{task_id}' was not found"))?;
+
+    {
+        let mut running = state.running.lock().map_err(|error| error.to_string())?;
+        if !running.insert(task_id.clone()) {
+            return Err(format!("task '{task_id}' is already running"));
+        }
+    }
+
+    let client = state.client.clone();
+    let llm = state.llm.clone();
+    let tools = state.tools.clone();
+    let model = state.model.clone();
+    let run_id = task_id.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let outcome = async {
+            let mut crew = build_standard_crew(&task.description, &llm, &tools, &model);
+            client.run_crew(&mut crew, approval_level).await
+        }
+        .await;
+
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut running) = state.running.lock() {
+                running.remove(&run_id);
+            }
+        }
+
+        let payload = match outcome {
+            Ok(_) => RunFinished {
+                task_id: run_id,
+                ok: true,
+                error: None,
+            },
+            Err(error) => RunFinished {
+                task_id: run_id,
+                ok: false,
+                error: Some(error.to_string()),
+            },
+        };
+        let _ = app.emit("cowbot-run-finished", payload);
+    });
+
+    Ok(())
+}
+
+/// Build the Planner/Coder/Reviewer pipeline used by the CLI, with the
+/// submitted task's description as the objective.
+fn build_standard_crew(
+    objective: &str,
+    llm: &std::sync::Arc<dyn cowbot_llm::LlmProvider>,
+    tools: &cowbot_tools::ToolRegistry,
+    model: &str,
+) -> Crew {
+    let planner_profile = StandardRoles::planner();
+    let planner_id = planner_profile.id.clone();
+    let planner = AgentInstance::new(planner_profile, llm.clone(), tools.clone(), model);
+
+    let coder_profile = StandardRoles::coder();
+    let coder_id = coder_profile.id.clone();
+    let coder = AgentInstance::new(coder_profile, llm.clone(), tools.clone(), model);
+
+    let reviewer_profile = StandardRoles::reviewer();
+    let reviewer_id = reviewer_profile.id.clone();
+    let reviewer = AgentInstance::new(reviewer_profile, llm.clone(), tools.clone(), model);
+
+    let mut crew = Crew::new(ProcessType::Sequential);
+    crew.add_agent(planner);
+    crew.add_agent(coder);
+    crew.add_agent(reviewer);
+
+    let plan_task = Task::new(
+        format!("Analyze objective and formulate architecture plan: {objective}"),
+        "A clear, step-by-step implementation and verification plan.",
+    )
+    .assign_to(planner_id);
+    let plan_id = plan_task.id.clone();
+
+    let code_task = Task::new(
+        "Execute code implementation and verify functionality in the sandbox.",
+        "Working source code and sandbox execution results.",
+    )
+    .assign_to(coder_id)
+    .with_context_task(plan_id);
+
+    let review_task = Task::new(
+        "Review implementation, tests, and diffs for correctness and edge cases.",
+        "Comprehensive review findings and final approval status.",
+    )
+    .assign_to(reviewer_id)
+    .with_context_task(code_task.id.clone());
+
+    crew.add_task(plan_task);
+    crew.add_task(code_task);
+    crew.add_task(review_task);
+    crew
 }
 
 #[tauri::command]
