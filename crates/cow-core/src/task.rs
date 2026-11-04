@@ -30,6 +30,7 @@ pub enum TaskStatus {
     InProgress,
     Completed { output: String },
     Failed { error: String },
+    Cancelled,
 }
 
 /// Task abstraction inspired by CrewAI.
