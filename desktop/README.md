@@ -2,9 +2,11 @@
 
 Tauri v2 shell with a React + TypeScript frontend. The Rust backend is a
 standalone Cargo project (outside the root workspace) and reaches the local
-core exclusively through `cow-client`. All data lives in `cowai.db` under the
+core exclusively through `cowbot-client`. All data lives in `cowbot.db` under the
 platform app-data directory, so the desktop app and the CLI can use separate
-databases without sharing state.
+databases without sharing state. On first launch after the CowBot rename, an
+existing `cowai.db` from the previous `com.cowai.desktop` directory is copied
+into the new app-data directory automatically.
 
 The current UI has three views: **Channels** (channels and live messages),
 **Tasks** (create tasks, inspect assignment/run history, cancel), and

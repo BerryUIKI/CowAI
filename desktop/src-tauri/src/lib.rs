@@ -1,8 +1,9 @@
 mod commands;
+mod migration;
 
 use std::sync::Arc;
 
-use cow_client::{Client, LocalClient};
+use cowbot_client::{Client, LocalClient};
 use tauri::{Emitter, Manager};
 
 /// Shared state for Tauri commands.
@@ -16,7 +17,8 @@ pub fn run() {
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let db_path = data_dir.join("cowai.db");
+            migration::migrate_legacy_database(&data_dir);
+            let db_path = data_dir.join("cowbot.db");
             let client = tauri::async_runtime::block_on(LocalClient::open(&db_path))?;
             // Local mode spawns the forwarding task, so subscribe must run
             // inside the runtime context.
@@ -24,7 +26,7 @@ pub fn run() {
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = events.recv().await {
-                    let _ = handle.emit("cowai-event", &event);
+                    let _ = handle.emit("cowbot-event", &event);
                 }
             });
 
@@ -53,5 +55,5 @@ pub fn run() {
             commands::decide_approval,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running CowAI");
+        .expect("error while running CowBot");
 }
