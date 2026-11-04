@@ -10,9 +10,9 @@ CowAI is an open-source, high-performance multi-agent collaboration platform wit
 
 **Current phase: Phase 1 (local/offline MVP) implementation under GitFlow.** The design docs are agreed; milestones 1.1–1.5 are implemented on `dev`. Continue with the remaining roadmap milestones, keeping the documentation in sync as each one lands.
 
-- **Implemented baseline**: the workspace crates below, a working sequential agent crew, a local subprocess code sandbox, an OpenAI-compatible + mock LLM client, SQLite persistence via `cow-store`, a transport-neutral `cow-client` with a local backend, and the `cowai` CLI (`init`, `run`, `tools`). Tests, `clippy -D warnings`, and `cargo fmt --check` pass.
-- **Known gaps** (not yet built): `cow-client` remote mode and desktop UI wiring (local client and CLI exist), Tauri desktop shell and React UI, `.cowpkg` workspace packaging, a wake/re-entry scheduler for delegated assignments (budget enforcement itself lives in `AssignmentService`), hierarchical orchestration, agent long-term memory, isolated sandbox backends (Docker/WASM), REST/WebSocket surface, config file support, streaming responses, retries/rate limiting/token accounting, and channel-based collaboration wired into the CLI.
-- **Documentation**: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/ADR/` (0001–0008), `docs/TEMPLATE_FORMAT.md`, and `docs/REFERENCES.md` (external design references). Update them with every milestone.
+- **Implemented baseline**: the workspace crates below, a working sequential agent crew, a local subprocess code sandbox, an OpenAI-compatible + mock LLM client, SQLite persistence via `cow-store`, a transport-neutral `cow-client` with a local backend, the `cowai` CLI (`init`, `run`, `tools`), and a Tauri v2 desktop shell with a React channels/messages UI. Tests, `clippy -D warnings`, and `cargo fmt --check` pass.
+- **Known gaps** (not yet built): `cow-client` remote mode and the remaining desktop views (tasks, approvals, agents/templates, settings), `.cowpkg` workspace packaging, a wake/re-entry scheduler for delegated assignments (budget enforcement itself lives in `AssignmentService`), hierarchical orchestration, agent long-term memory, isolated sandbox backends (Docker/WASM), REST/WebSocket surface, config file support, streaming responses, retries/rate limiting/token accounting, and channel-based collaboration wired into the CLI.
+- **Documentation**: `docs/PRD.md`, `docs/ARCHITECTURE.md`, `docs/ROADMAP.md`, `docs/ADR/` (0001–0009), `docs/TEMPLATE_FORMAT.md`, and `docs/REFERENCES.md` (external design references). Update them with every milestone.
 - **Commit style**: small, atomic commits; frequent pushes and small PRs.
 - **Language**: all repository artifacts — code, comments, docs, commit messages, and branch names — must be English; conversation with the user may be Chinese.
 - **Git workflow**: GitFlow with `main` as the release branch and `dev` as the integration branch (see below).
@@ -45,6 +45,15 @@ The project is structured as a Cargo workspace under `crates/`:
 - **`crates/cow-service`**: Application services for the local runtime: idempotent local owner/workspace bootstrap, channel/message operations that persist first and then publish events, the assignment runtime (tree lifecycle, event log, budgets, stall guard, restart reconciliation), the approval service (risk policy, pending approvals, audit), a sequential crew runner built on assignments, and template management with built-in templates, validation, CRUD, and `.cowtemplate` import/export.
 - **`crates/cow-cli`**: The `cowai` binary. `init` opens the local database through `cow-client` and prints the session; `run` executes the Planner/Coder/Reviewer crew through `LocalClient::run_crew` with persisted history, `--db`, `--dry-run`, and an interactive `--approval` policy; `tools` inspects the registry and smoke-tests the sandbox.
 
+## Desktop App
+
+The desktop app lives under `desktop/` and is not part of the Cargo workspace:
+
+- **`desktop/`**: React 19 + TypeScript + Vite frontend. The first slice renders the workspace/channel list, message timeline, and composer, and refreshes from Tauri events.
+- **`desktop/src-tauri/`**: Standalone Tauri v2 Cargo project. Opens `LocalClient` on `app_data_dir()/cowai.db`, exposes Tauri commands that wrap the `Client` trait (`get_session`, `list_channels`, `create_channel`, `list_messages`, `post_message`), and forwards client events on the `cowai-event` channel.
+- **Architecture**: see `docs/ADR/0009-desktop-ipc-and-state.md`. The frontend never touches SQLite or `cow-service`.
+- **Gates**: root `cargo fmt/clippy/test --workspace` intentionally excludes `src-tauri`; run `npm run build` and `cargo clippy --manifest-path desktop/src-tauri/Cargo.toml --all-targets -- -D warnings` when changing the shell.
+
 ## Common Development Commands
 
 ### Building
@@ -57,7 +66,17 @@ cargo build --release --workspace
 ```bash
 cargo run -p cow-cli -- --help
 cargo run -p cow-cli -- tools
+cargo run -p cow-cli -- init --db cowai.db
 cargo run -p cow-cli -- run --task "Analyze and write code" --dry-run
+```
+
+### Running the Desktop App
+```bash
+cd desktop
+npm install
+npm run tauri dev        # dev window + Vite server
+npm run build            # type-check and bundle the frontend
+cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 
 ### Testing
