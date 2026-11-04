@@ -81,7 +81,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Phase 1.4 introduces an assignment runtime (ADR-0006): each unit of agent work is an assignment record with `root_id` / `parent_id` / `depth`, origin, requester, assignee, mode, reply, status, execution/restart counters, and approval level.
 - Assignment lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes an append-only event in the same transaction.
 - v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`) on top of assignments; per-root request/execution/wake budgets; stall guard; restart reconciliation.
-- Implementation status (Phase 1.4): the lifecycle, event log, stall guard, restart reconciliation, and budget checks are wired into `cow-service`. `AssignmentService` enforces the request budget in `enqueue_child`, the execution budget in `start`, and the wake budget in `wake_parent`; the sequential crew runner only exercises the execution budget because it neither delegates nor wakes parents, and no wake/re-entry scheduler exists yet. The crew runner records one `Run` per task attempt with `Completed` or `Failed` status; tool-call records are not written by the runtime yet.
+- Implementation status (Phase 1.4): the lifecycle, event log, stall guard, restart reconciliation, and budget checks are wired into `cow-service`. `AssignmentService` enforces the request budget in `enqueue_child`, the execution budget in `start`, and the wake budget in `wake_parent`; the sequential crew runner only exercises the execution budget because it neither delegates nor wakes parents, and no wake/re-entry scheduler exists yet. The crew runner records one `Run` per task attempt with `Completed` or `Failed` status and one `ToolCallRecord` per executed tool call, including denied calls.
 - Later: hierarchical orchestration (manager agent delegation), DAG workflows, and a background wake scheduler.
 - Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
 - Phase 1.4 stores the effective approval level on the assignment; inheritance (`max(own, inherited)`) and enforcement are implemented in Phase 1.5.
@@ -111,7 +111,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 
 - `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
 - Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, assignments, assignment events, runs, tool calls, approvals, and audit events.
-- The crew runner records a `Run` per task attempt; tool-call records are still not written by the runtime, a gap that must close before the desktop UI can show per-run tool history.
+- The crew runner records a `Run` per task attempt and a `ToolCallRecord` per tool call, including its arguments and result, so the desktop UI can read per-run tool history.
 - Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart; the startup sweep covers rows left behind when the waiting process died.
 
 ### 3.9 Access Layer
