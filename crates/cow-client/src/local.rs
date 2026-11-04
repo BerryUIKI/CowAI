@@ -4,9 +4,11 @@ use async_trait::async_trait;
 use cow_bus::EventBus;
 use cow_core::agent::AgentProfile;
 use cow_core::approval::{Approval, ApprovalId, ApprovalStatus};
-use cow_core::assignment::{Assignment, AssignmentRequester};
+use cow_core::assignment::{Assignment, AssignmentEvent, AssignmentId, AssignmentRequester};
+use cow_core::audit::AuditEvent;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage, Sender};
 use cow_core::error::{CowError, CowResult};
+use cow_core::run::{Run, RunId, ToolCallRecord};
 use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
 use cow_service::{
@@ -189,6 +191,31 @@ impl Client for LocalClient {
         self.assignments.list_for_task(task_id).await
     }
 
+    async fn list_runs(&self, task_id: &TaskId) -> CowResult<Vec<Run>> {
+        self.store.list_runs(task_id).await
+    }
+
+    async fn get_run(&self, run_id: &RunId) -> CowResult<Option<Run>> {
+        self.store.get_run(run_id).await
+    }
+
+    async fn list_tool_calls(&self, run_id: &RunId) -> CowResult<Vec<ToolCallRecord>> {
+        self.store.list_tool_calls(run_id).await
+    }
+
+    async fn list_assignment_events(
+        &self,
+        assignment_id: &AssignmentId,
+    ) -> CowResult<Vec<AssignmentEvent>> {
+        self.assignments.events(assignment_id).await
+    }
+
+    async fn list_audit_events(&self, limit: u32) -> CowResult<Vec<AuditEvent>> {
+        self.store
+            .list_audit_events(&self.session.workspace.id, limit)
+            .await
+    }
+
     async fn pending_approvals(&self) -> CowResult<Vec<Approval>> {
         self.approvals.pending_for_workspace().await
     }
@@ -251,8 +278,12 @@ impl Client for LocalClient {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cow_core::approval::{Approval, ApprovalStatus};
+    use cow_core::agent::AgentId;
+    use cow_core::approval::{Approval, ApprovalLevel, ApprovalStatus};
+    use cow_core::assignment::{AssignmentEventKind, AssignmentMode, AssignmentOrigin, ReplyMode};
+    use cow_core::run::RunStatus;
     use cow_core::task::Task;
+    use serde_json::json;
 
     #[tokio::test]
     async fn initialize_expires_orphaned_approvals() {
@@ -308,5 +339,76 @@ mod tests {
             Some(client.session().await.unwrap().user.id.0)
         );
         assert!(client.pending_approvals().await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn client_reads_run_and_audit_history() {
+        let store = Store::connect_in_memory().await.unwrap();
+        let client = LocalClient::initialize(store, EventBus::default_bus())
+            .await
+            .unwrap();
+        let session = client.session().await.unwrap();
+        let workspace_id = session.workspace.id;
+        let agent = AgentId::new("agent-1");
+
+        let task = Task::new("History task", "Output");
+        client
+            .store
+            .create_task(&workspace_id, None, &task)
+            .await
+            .unwrap();
+        let assignment = Assignment::new_root(
+            task.id.clone(),
+            AssignmentOrigin::User,
+            AssignmentRequester::User(session.user.id.0.clone()),
+            agent.clone(),
+            AssignmentMode::Work,
+            ReplyMode::Resume,
+            ApprovalLevel::Ask,
+        );
+        client.store.create_assignment(&assignment).await.unwrap();
+
+        let run = Run::new(task.id.clone(), agent);
+        client.store.create_run(&run).await.unwrap();
+        client
+            .store
+            .update_run_status(&run.id, RunStatus::Completed, None)
+            .await
+            .unwrap();
+
+        let mut record = ToolCallRecord::new(
+            run.id.clone(),
+            "read_file",
+            json!({ "path": "src/main.rs" }),
+        );
+        record.result = Some(json!({ "success": true, "output": "ok" }));
+        client.store.record_tool_call(&record).await.unwrap();
+
+        client
+            .store
+            .append_audit_event(&AuditEvent::new(
+                workspace_id.clone(),
+                "system",
+                "test.action",
+                "target",
+            ))
+            .await
+            .unwrap();
+
+        let runs = client.list_runs(&task.id).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, RunStatus::Completed);
+        assert_eq!(client.get_run(&run.id).await.unwrap().unwrap().id, run.id);
+
+        let calls = client.list_tool_calls(&run.id).await.unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].id, record.id);
+
+        let events = client.list_assignment_events(&assignment.id).await.unwrap();
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].kind, AssignmentEventKind::Enqueued);
+
+        let audit = client.list_audit_events(10).await.unwrap();
+        assert!(audit.iter().any(|event| event.action == "test.action"));
     }
 }
