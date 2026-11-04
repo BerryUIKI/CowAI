@@ -1,3 +1,4 @@
+use chrono::{Duration as ChronoDuration, Utc};
 use cow_core::agent::AgentId;
 use cow_core::approval::Approval;
 use cow_core::audit::AuditEvent;
@@ -9,7 +10,6 @@ use cow_core::run::{Run, RunStatus, ToolCallRecord};
 use cow_core::task::{Task, TaskStatus};
 use cow_core::template::{Template, TemplateKind};
 use cow_store::Store;
-use chrono::{Duration as ChronoDuration, Utc};
 use serde_json::json;
 
 async fn test_store() -> Store {
@@ -164,8 +164,11 @@ async fn list_messages_returns_the_latest_window_in_chronological_order() {
     let base = Utc::now();
     let mut sent = Vec::new();
     for index in 0..3 {
-        let mut message =
-            ChannelMessage::new(channel.id.clone(), Sender::System, format!("message {index}"));
+        let mut message = ChannelMessage::new(
+            channel.id.clone(),
+            Sender::System,
+            format!("message {index}"),
+        );
         message.created_at = base + ChronoDuration::seconds(index);
         store.append_message(&message).await.unwrap();
         sent.push(message);
