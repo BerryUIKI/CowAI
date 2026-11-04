@@ -137,6 +137,7 @@ fn approval_status_to_str(status: ApprovalStatus) -> &'static str {
         ApprovalStatus::Pending => "pending",
         ApprovalStatus::Approved => "approved",
         ApprovalStatus::Rejected => "rejected",
+        ApprovalStatus::Expired => "expired",
     }
 }
 
@@ -145,6 +146,7 @@ fn approval_status_from_str(value: &str) -> CowResult<ApprovalStatus> {
         "pending" => Ok(ApprovalStatus::Pending),
         "approved" => Ok(ApprovalStatus::Approved),
         "rejected" => Ok(ApprovalStatus::Rejected),
+        "expired" => Ok(ApprovalStatus::Expired),
         other => Err(CowError::Storage(format!(
             "unknown approval status '{other}'"
         ))),
@@ -352,14 +354,23 @@ impl Store {
         status: ApprovalStatus,
         decided_by: &str,
     ) -> CowResult<()> {
-        sqlx::query("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ?")
-            .bind(approval_status_to_str(status))
-            .bind(decided_by)
-            .bind(Utc::now().to_rfc3339())
-            .bind(&id.0)
-            .execute(self.pool())
-            .await
-            .map_err(db)?;
+        let updated = sqlx::query(
+            "UPDATE approvals SET status = ?, decided_by = ?, decided_at = ?
+             WHERE id = ? AND status = 'pending'",
+        )
+        .bind(approval_status_to_str(status))
+        .bind(decided_by)
+        .bind(Utc::now().to_rfc3339())
+        .bind(&id.0)
+        .execute(self.pool())
+        .await
+        .map_err(db)?
+        .rows_affected();
+        if updated == 0 {
+            return Err(CowError::Task(format!(
+                "approval '{id}' is not pending and cannot be decided"
+            )));
+        }
         Ok(())
     }
 

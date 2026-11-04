@@ -63,7 +63,9 @@ Delivered:
 | 1.6 | Desktop shell and UI | Tauri shell; React + TypeScript UI for channels, tasks, agents, approvals, templates, and settings; local `cow-client` | 1.2–1.5 |
 | 1.7 | Packaging and data exchange | Windows/macOS/Linux builds; `.cowpkg` workspace export/import; first-run onboarding; user documentation | 1.6 |
 
-> **Progress**: milestones 1.1–1.5 are implemented — `cow-store` provides embedded SQLite migrations and repositories, `cow-service` provides idempotent local bootstrap, channel/message persistence wired to the event bus, the assignment runtime with event-sourced lifecycle/budgets/restart reconciliation, a sequential crew runner, the static risk classifier with approval gates and audit records, and validated built-in templates with `.cowtemplate` import/export.
+> **Progress**: milestones 1.1–1.5 are implemented — `cow-store` provides embedded SQLite migrations and repositories, `cow-service` provides idempotent local bootstrap, channel/message persistence wired to the event bus, the assignment runtime with event-sourced lifecycle/restart reconciliation, a sequential crew runner, the static risk classifier with approval gates and audit records, and validated built-in templates with `.cowtemplate` import/export.
+>
+> **Remaining within 1.1–1.5**: `AssignmentService` enforces the request, execution, and wake budgets, but the sequential crew runner only exercises the execution budget and there is no wake/re-entry scheduler for delegated work; runs and tool calls are not recorded by the runtime; `cow-client` does not exist yet, so the UI cannot be built safely until it does. These are tracked as the first tasks of 1.6.
 
 ### 4.2 Phase 1 Exit Criteria
 

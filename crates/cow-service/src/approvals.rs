@@ -118,6 +118,11 @@ impl ApprovalService {
                     .await?;
 
                 let decided = self.wait_for_decision(&approval.id).await?;
+                let decided = if decided.status == ApprovalStatus::Pending {
+                    self.expire_or_load_decision(&approval.id).await?
+                } else {
+                    decided
+                };
                 match decided.status {
                     ApprovalStatus::Approved => {
                         self.record_audit(
@@ -138,13 +143,17 @@ impl ApprovalService {
                             reason: format!("approval rejected by {decided_by}"),
                         })
                     }
-                    ApprovalStatus::Pending => {
-                        self.record_audit("system", "tool.approval_timed_out", call, &assessment)
+                    ApprovalStatus::Expired => {
+                        self.record_audit("system", "tool.approval_expired", call, &assessment)
                             .await?;
                         Ok(ToolAuthorization::Denied {
-                            reason: "approval timed out".to_string(),
+                            reason: "approval expired without a decision".to_string(),
                         })
                     }
+                    ApprovalStatus::Pending => Err(CowError::Task(format!(
+                        "approval '{}' remained pending after its timeout",
+                        approval.id
+                    ))),
                 }
             }
         }
@@ -156,9 +165,9 @@ impl ApprovalService {
         status: ApprovalStatus,
         decided_by: &str,
     ) -> CowResult<Approval> {
-        if status == ApprovalStatus::Pending {
+        if status != ApprovalStatus::Approved && status != ApprovalStatus::Rejected {
             return Err(CowError::Config(
-                "cannot decide an approval as pending".to_string(),
+                "an approval can only be approved or rejected".to_string(),
             ));
         }
         self.store
@@ -209,6 +218,33 @@ impl ApprovalService {
         }
     }
 
+    /// Expire a timed-out approval unless another decision landed first.
+    ///
+    /// `decide_approval` only updates pending rows, so a human decision that
+    /// races the timeout makes the expiry update fail. In that case the stored
+    /// decision is returned and honoured instead of failing the tool call.
+    async fn expire_or_load_decision(&self, approval_id: &ApprovalId) -> CowResult<Approval> {
+        match self
+            .store
+            .decide_approval(approval_id, ApprovalStatus::Expired, "system")
+            .await
+        {
+            Ok(()) => {
+                let expired = self.store.get_approval(approval_id).await?.ok_or_else(|| {
+                    CowError::Task(format!("approval '{approval_id}' was not found"))
+                })?;
+                let _ = self.bus.publish(Event::new(EventPayload::ApprovalDecided {
+                    approval: expired.clone(),
+                }));
+                Ok(expired)
+            }
+            Err(error) => match self.store.get_approval(approval_id).await? {
+                Some(stored) if stored.status != ApprovalStatus::Pending => Ok(stored),
+                _ => Err(error),
+            },
+        }
+    }
+
     async fn record_audit(
         &self,
         actor: &str,
@@ -222,11 +258,12 @@ impl ApprovalService {
                 actor,
                 action,
                 format!(
-                    "{} ({}) risk={} rule={}",
+                    "{} ({}) risk={} rule={} arguments={}",
                     call.name,
                     call.id,
                     assessment.level.as_str(),
-                    assessment.rule_id
+                    assessment.rule_id,
+                    call.arguments
                 ),
             ))
             .await
@@ -255,5 +292,39 @@ impl ToolGate for ScopedApprovalGate {
         self.service
             .authorize(&self.assignment_id, agent_id, call)
             .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cow_core::task::Task;
+
+    #[tokio::test]
+    async fn expiry_keeps_a_decision_that_raced_the_timeout() {
+        let store = Store::connect_in_memory().await.unwrap();
+        store.migrate().await.unwrap();
+        let context = crate::bootstrap_local(&store).await.unwrap();
+        let task = Task::new("Race task", "Output");
+        store
+            .create_task(&context.workspace.id, None, &task)
+            .await
+            .unwrap();
+
+        let service = ApprovalService::new(
+            store.clone(),
+            EventBus::default_bus(),
+            context.workspace.id.clone(),
+        );
+        let approval = Approval::new(task.id.clone(), "call-1");
+        store.create_approval(&approval).await.unwrap();
+        service
+            .decide(&approval.id, ApprovalStatus::Approved, "user-1")
+            .await
+            .unwrap();
+
+        let resolved = service.expire_or_load_decision(&approval.id).await.unwrap();
+        assert_eq!(resolved.status, ApprovalStatus::Approved);
+        assert_eq!(resolved.decided_by.as_deref(), Some("user-1"));
     }
 }

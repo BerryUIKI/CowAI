@@ -155,6 +155,81 @@ async fn trusted_denies_critical_operations() {
 }
 
 #[tokio::test]
+async fn expired_approval_is_persisted_and_denies_the_tool() {
+    let (store, service, assignment, agent, workspace_id) =
+        setup(ApprovalLevel::Ask, Duration::from_millis(300)).await;
+
+    let authorization = service
+        .authorize(
+            &assignment.id,
+            &agent,
+            &call("execute_code", json!({ "command": "echo hello" })),
+        )
+        .await
+        .unwrap();
+    match authorization {
+        ToolAuthorization::Denied { reason } => assert!(reason.contains("expired")),
+        other => panic!("expected denied, got {other:?}"),
+    }
+
+    let pending = store
+        .list_pending_approvals(&assignment.task_id)
+        .await
+        .unwrap();
+    assert!(
+        pending.is_empty(),
+        "expired approvals must not stay pending"
+    );
+
+    let events = store.list_audit_events(&workspace_id, 50).await.unwrap();
+    assert!(events
+        .iter()
+        .any(|event| event.action == "tool.approval_expired"));
+}
+
+#[tokio::test]
+async fn already_decided_approval_cannot_be_decided_again() {
+    let (store, service, assignment, agent, _workspace_id) =
+        setup(ApprovalLevel::Ask, Duration::from_secs(2)).await;
+
+    let task_id = assignment.task_id.clone();
+    let decider = service.clone();
+    let decide_store = store.clone();
+    let authorize = tokio::spawn(async move {
+        service
+            .authorize(
+                &assignment.id,
+                &agent,
+                &call("execute_code", json!({ "command": "echo hello" })),
+            )
+            .await
+    });
+    let (first, second) = tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        let pending = decide_store.list_pending_approvals(&task_id).await.unwrap();
+        assert_eq!(pending.len(), 1);
+        decider
+            .decide(&pending[0].id, ApprovalStatus::Approved, "user-1")
+            .await
+            .unwrap();
+        let again = decider
+            .decide(&pending[0].id, ApprovalStatus::Rejected, "user-2")
+            .await;
+        (pending[0].id.clone(), again.is_err())
+    })
+    .await
+    .unwrap();
+
+    let authorization = authorize.await.unwrap().unwrap();
+    assert_eq!(authorization, ToolAuthorization::Approved);
+
+    let stored = store.get_approval(&first).await.unwrap().unwrap();
+    assert_eq!(stored.status, ApprovalStatus::Approved);
+    assert_eq!(stored.decided_by.as_deref(), Some("user-1"));
+    assert!(second, "a second decision on the same approval must fail");
+}
+
+#[tokio::test]
 async fn pending_approval_is_approved_by_a_human() {
     let (store, service, assignment, agent, workspace_id) =
         setup(ApprovalLevel::Ask, Duration::from_secs(2)).await;

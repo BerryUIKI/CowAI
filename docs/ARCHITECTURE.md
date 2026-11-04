@@ -81,9 +81,10 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Phase 1.4 introduces an assignment runtime (ADR-0006): each unit of agent work is an assignment record with `root_id` / `parent_id` / `depth`, origin, requester, assignee, mode, reply, status, execution/restart counters, and approval level.
 - Assignment lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes an append-only event in the same transaction.
 - v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`) on top of assignments; per-root request/execution/wake budgets; stall guard; restart reconciliation.
+- Implementation status (Phase 1.4): the lifecycle, event log, stall guard, restart reconciliation, and budget checks are wired into `cow-service`. `AssignmentService` enforces the request budget in `enqueue_child`, the execution budget in `start`, and the wake budget in `wake_parent`; the sequential crew runner only exercises the execution budget because it neither delegates nor wakes parents, and no wake/re-entry scheduler exists yet. Runs and tool-call records are not written by the runtime yet; only assignment events and audit events are produced.
 - Later: hierarchical orchestration (manager agent delegation), DAG workflows, and a background wake scheduler.
 - Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
-- Phase 1.4 stores the effective approval level on the assignment; inheritance (`max(own, inherited)`) and enforcement are delivered in Phase 1.5.
+- Phase 1.4 stores the effective approval level on the assignment; inheritance (`max(own, inherited)`) and enforcement are implemented in Phase 1.5.
 
 ### 3.5 Tools and Sandbox
 
@@ -92,7 +93,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - `SandboxBackend`: local subprocess in v1; Docker in P1; WASM evaluated in P2.
 - Resource limits: timeout, output truncation, working-directory restriction, environment-variable filtering.
 - Static risk classifier (`StaticRiskClassifier`): grades every tool call as `ReadOnly`, `Low`, `Medium`, `High`, or `Critical` using deterministic rules; unknown tools default to `High`.
-- Approval gate: `ToolGate` is consulted before every tool execution. `cow-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events.
+- Approval gate: `ToolGate` is consulted before every tool execution. `cow-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events. Only one decision is accepted per approval: `decide_approval` updates pending rows exclusively, so concurrent reviewers cannot overwrite each other. When the wait times out the approval is persisted as `expired` and the tool call is denied.
 
 ### 3.6 Model Gateway
 
@@ -109,14 +110,15 @@ CLI (cowai) -- cow-client -- local mode or remote server
 ### 3.8 Persistence and Audit
 
 - `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
-- Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, runs, tool calls, approvals, and audit events.
-- Audit events record who approved or rejected what, and which tools an agent executed.
+- Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, assignments, assignment events, runs, tool calls, approvals, and audit events.
+- Repository methods exist for runs and tool calls, but the Phase 1.4/1.5 runtime does not yet write them; that gap must close before the desktop UI can show per-run tool history.
+- Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart.
 
 ### 3.9 Access Layer
 
-- **Desktop UI**: Tauri web frontend for channels, tasks, agents, approvals, and settings.
+- **Desktop UI**: Tauri web frontend for channels, tasks, agents, approvals, and settings. All UI data access goes through `cow-client`, never directly through `cow-store` or `cow-service`.
 - **HTTP/WebSocket API**: `cow-server` serves desktop team mode, the CLI, and a future browser entry point.
-- **CLI**: `cowai` for initialization, diagnostics, headless runs, and debugging.
+- **CLI**: `cowai` for initialization, diagnostics, headless runs, and debugging. It does not use `cow-service`, the store, or channel collaboration yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
 
 ---
@@ -178,7 +180,7 @@ Inspired by Claude Code's permission modes:
 | `AssignmentEvent` | id, assignment_id, kind, detail, created_at |
 | `Run` | id, task_id, agent_id, status, started_at, finished_at |
 | `ToolCall` | id, run_id, tool_name, arguments, result, approved_by |
-| `Approval` | id, task_id, tool_call_id, status, decided_by, decided_at |
+| `Approval` | id, task_id, tool_call_id, status (`pending` / `approved` / `rejected` / `expired`), decided_by, decided_at |
 | `AuditEvent` | id, workspace_id, actor, action, target, created_at |
 
 > Final field definitions will follow the `cow-store` migrations.
@@ -194,7 +196,7 @@ Inspired by Claude Code's permission modes:
 | `cow-tools` | Tool registry, sandbox backends, and static risk classification | Existing (subprocess) |
 | `cow-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
 | `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
-| `cow-cli` | `cowai` CLI | Existing |
+| `cow-cli` | `cowai` CLI | Existing (standalone; not yet wired to `cow-service`) |
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
 | `cow-service` | Local bootstrap, channel/message services, assignment runtime, approval service, sequential crew runner, template management, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
