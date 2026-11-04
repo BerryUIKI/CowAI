@@ -1,18 +1,42 @@
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use cow_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
 use cow_bus::EventBus;
 use cow_core::approval::ApprovalLevel;
 use cow_core::assignment::{
     AssignmentEventKind, AssignmentOrigin, AssignmentRequester, AssignmentStatus,
 };
+use cow_core::error::CowError;
 use cow_core::run::RunStatus;
 use cow_core::task::Task;
+use cow_core::tool::{Tool, ToolCall, ToolResult};
 use cow_llm::{ChatCompletionResponse, LlmToolCall, MockLlmProvider};
 use cow_service::{bootstrap_local, CrewRunner};
 use cow_store::Store;
 use cow_tools::ToolRegistry;
 use serde_json::json;
+
+struct EchoTool;
+
+#[async_trait]
+impl Tool for EchoTool {
+    fn name(&self) -> &str {
+        "echo_tool"
+    }
+
+    fn description(&self) -> &str {
+        "Echoes a value"
+    }
+
+    fn parameters_schema(&self) -> serde_json::Value {
+        json!({ "type": "object" })
+    }
+
+    async fn execute(&self, call: &ToolCall) -> Result<ToolResult, CowError> {
+        Ok(ToolResult::success(call.id.clone(), "echoed"))
+    }
+}
 
 #[tokio::test]
 async fn crew_runner_executes_tasks_through_assignments() {
@@ -148,4 +172,67 @@ async fn failed_task_leaves_a_failed_run() {
     let assignments = store.list_assignments_for_task(&task_id).await.unwrap();
     assert_eq!(assignments.len(), 1);
     assert_eq!(assignments[0].status, AssignmentStatus::Failed);
+}
+
+#[tokio::test]
+async fn crew_runner_records_tool_calls() {
+    let store = Store::connect_in_memory().await.unwrap();
+    store.migrate().await.unwrap();
+    let context = bootstrap_local(&store).await.unwrap();
+    let bus = EventBus::default_bus();
+    let runner = CrewRunner::new(store.clone(), bus);
+
+    let responses = vec![
+        ChatCompletionResponse {
+            content: Some("calling the tool".to_string()),
+            tool_calls: vec![LlmToolCall {
+                id: "call-1".to_string(),
+                name: "echo_tool".to_string(),
+                arguments: json!({ "value": "hi" }),
+            }],
+            finish_reason: Some("tool_calls".to_string()),
+        },
+        ChatCompletionResponse {
+            content: Some("finished".to_string()),
+            tool_calls: Vec::new(),
+            finish_reason: Some("stop".to_string()),
+        },
+    ];
+    let llm = Arc::new(MockLlmProvider::new(responses));
+    let mut tools = ToolRegistry::new();
+    tools.register(Arc::new(EchoTool));
+
+    let profile = StandardRoles::coder();
+    let agent_id = profile.id.clone();
+    let mut crew = Crew::new(ProcessType::Sequential);
+    crew.add_agent(AgentInstance::new(profile, llm, tools, "mock-model"));
+
+    let task = Task::new("Call the echo tool", "Echoed output").assign_to(agent_id);
+    let task_id = task.id.clone();
+    crew.add_task(task);
+
+    let results = runner
+        .run(
+            &mut crew,
+            &context.workspace.id,
+            AssignmentRequester::User(context.user.id.0.clone()),
+            AssignmentOrigin::User,
+            ApprovalLevel::Trusted,
+        )
+        .await
+        .unwrap();
+    assert_eq!(results.len(), 1);
+
+    let runs = store.list_runs(&task_id).await.unwrap();
+    assert_eq!(runs.len(), 1);
+    let calls = store.list_tool_calls(&runs[0].id).await.unwrap();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].id, "call-1");
+    assert_eq!(calls[0].name, "echo_tool");
+    assert_eq!(calls[0].arguments, json!({ "value": "hi" }));
+    assert_eq!(calls[0].approved_by, None);
+
+    let result = calls[0].result.as_ref().unwrap();
+    assert_eq!(result["success"], json!(true));
+    assert_eq!(result["output"], json!("echoed"));
 }
