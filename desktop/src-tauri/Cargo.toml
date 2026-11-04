@@ -1,0 +1,19 @@
+[package]
+name = "cowai-desktop"
+version = "0.1.0"
+description = "CowAI desktop application"
+edition = "2021"
+
+[lib]
+name = "cowai_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+cow-client = { path = "../../crates/cow-client" }
+cow-core = { path = "../../crates/cow-core" }
+
+[workspace]

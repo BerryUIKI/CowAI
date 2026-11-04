@@ -329,6 +329,7 @@ dependencies = [
  "cow-service",
  "cow-store",
  "cow-tools",
+ "serde",
  "serde_json",
  "tokio",
  "tracing",
