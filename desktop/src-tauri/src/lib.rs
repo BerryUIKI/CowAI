@@ -39,6 +39,18 @@ pub fn run() {
             commands::create_channel,
             commands::list_messages,
             commands::post_message,
+            commands::list_agents,
+            commands::list_templates,
+            commands::instantiate_agents,
+            commands::create_task,
+            commands::list_tasks,
+            commands::cancel_task,
+            commands::list_assignments,
+            commands::list_assignment_events,
+            commands::list_runs,
+            commands::list_tool_calls,
+            commands::pending_approvals,
+            commands::decide_approval,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CowAI");
