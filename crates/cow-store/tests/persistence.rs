@@ -9,6 +9,7 @@ use cow_core::run::{Run, RunStatus, ToolCallRecord};
 use cow_core::task::{Task, TaskStatus};
 use cow_core::template::{Template, TemplateKind};
 use cow_store::Store;
+use chrono::{Duration as ChronoDuration, Utc};
 use serde_json::json;
 
 async fn test_store() -> Store {
@@ -150,6 +151,30 @@ async fn collaboration_roundtrip() {
     let channels = store.list_channels(&workspace.id).await.unwrap();
     assert_eq!(channels.len(), 1);
     assert_eq!(channels[0].name, "general");
+}
+
+#[tokio::test]
+async fn list_messages_returns_the_latest_window_in_chronological_order() {
+    let store = test_store().await;
+    let (_user, workspace) = seed_workspace(&store).await;
+
+    let channel = Channel::new("general", "Team coordination");
+    store.create_channel(&workspace.id, &channel).await.unwrap();
+
+    let base = Utc::now();
+    let mut sent = Vec::new();
+    for index in 0..3 {
+        let mut message =
+            ChannelMessage::new(channel.id.clone(), Sender::System, format!("message {index}"));
+        message.created_at = base + ChronoDuration::seconds(index);
+        store.append_message(&message).await.unwrap();
+        sent.push(message);
+    }
+
+    let messages = store.list_messages(&channel.id, 2).await.unwrap();
+    assert_eq!(messages.len(), 2);
+    assert_eq!(messages[0].id, sent[1].id);
+    assert_eq!(messages[1].id, sent[2].id);
 }
 
 #[tokio::test]

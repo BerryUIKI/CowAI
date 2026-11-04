@@ -126,9 +126,11 @@ impl Store {
         limit: u32,
     ) -> CowResult<Vec<ChannelMessage>> {
         let rows = sqlx::query_as::<_, MessageRow>(
-            "SELECT id, channel_id, sender, content, thread_id, created_at
-             FROM messages WHERE channel_id = ?
-             ORDER BY created_at ASC LIMIT ?",
+            "SELECT id, channel_id, sender, content, thread_id, created_at FROM (
+                 SELECT id, channel_id, sender, content, thread_id, created_at
+                 FROM messages WHERE channel_id = ?
+                 ORDER BY created_at DESC LIMIT ?
+             ) ORDER BY created_at ASC",
         )
         .bind(&channel_id.0)
         .bind(i64::from(limit))
