@@ -504,8 +504,12 @@ dependencies = [
 name = "cowbot-desktop"
 version = "0.1.0"
 dependencies = [
+ "cowbot-agent",
  "cowbot-client",
  "cowbot-core",
+ "cowbot-llm",
+ "cowbot-tools",
+ "serde",
  "tauri",
  "tauri-build",
  "tempfile",

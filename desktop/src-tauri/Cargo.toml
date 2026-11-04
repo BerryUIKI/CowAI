@@ -14,8 +14,12 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+serde = { version = "1.0", features = ["derive"] }
+cowbot-agent = { path = "../../crates/cowbot-agent" }
 cowbot-client = { path = "../../crates/cowbot-client" }
 cowbot-core = { path = "../../crates/cowbot-core" }
+cowbot-llm = { path = "../../crates/cowbot-llm" }
+cowbot-tools = { path = "../../crates/cowbot-tools" }
 
 [dev-dependencies]
 tempfile = "3"
