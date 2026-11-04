@@ -6,11 +6,13 @@ use cow_core::approval::ApprovalLevel;
 use cow_core::assignment::{
     AssignmentEventKind, AssignmentOrigin, AssignmentRequester, AssignmentStatus,
 };
+use cow_core::run::RunStatus;
 use cow_core::task::Task;
-use cow_llm::MockLlmProvider;
+use cow_llm::{ChatCompletionResponse, LlmToolCall, MockLlmProvider};
 use cow_service::{bootstrap_local, CrewRunner};
 use cow_store::Store;
 use cow_tools::ToolRegistry;
+use serde_json::json;
 
 #[tokio::test]
 async fn crew_runner_executes_tasks_through_assignments() {
@@ -79,5 +81,71 @@ async fn crew_runner_executes_tasks_through_assignments() {
                 AssignmentEventKind::Completed,
             ]
         );
+
+        let runs = store.list_runs(task_id).await.unwrap();
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].status, RunStatus::Completed);
+        assert!(runs[0].finished_at.is_some());
+
+        let expected_agent = crew
+            .tasks
+            .iter()
+            .find(|task| task.id == *task_id)
+            .and_then(|task| task.assigned_agent.clone())
+            .unwrap();
+        assert_eq!(runs[0].agent_id, expected_agent);
     }
+}
+
+#[tokio::test]
+async fn failed_task_leaves_a_failed_run() {
+    let store = Store::connect_in_memory().await.unwrap();
+    store.migrate().await.unwrap();
+    let context = bootstrap_local(&store).await.unwrap();
+    let bus = EventBus::default_bus();
+    let runner = CrewRunner::new(store.clone(), bus);
+
+    let mut profile = StandardRoles::coder();
+    profile.max_iterations = 1;
+    let agent_id = profile.id.clone();
+    let llm = Arc::new(MockLlmProvider::new(vec![ChatCompletionResponse {
+        content: Some("calling a tool".to_string()),
+        tool_calls: vec![LlmToolCall {
+            id: "call-1".to_string(),
+            name: "execute_code".to_string(),
+            arguments: json!({ "command": "echo hi" }),
+        }],
+        finish_reason: Some("tool_calls".to_string()),
+    }]));
+
+    let mut crew = Crew::new(ProcessType::Sequential);
+    crew.add_agent(AgentInstance::new(
+        profile,
+        llm,
+        ToolRegistry::new(),
+        "mock-model",
+    ));
+    let task = Task::new("Exhaust the iteration limit", "A failure").assign_to(agent_id);
+    let task_id = task.id.clone();
+    crew.add_task(task);
+
+    let result = runner
+        .run(
+            &mut crew,
+            &context.workspace.id,
+            AssignmentRequester::User(context.user.id.0.clone()),
+            AssignmentOrigin::User,
+            ApprovalLevel::Trusted,
+        )
+        .await;
+    assert!(result.is_err());
+
+    let runs = store.list_runs(&task_id).await.unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].status, RunStatus::Failed);
+    assert!(runs[0].finished_at.is_some());
+
+    let assignments = store.list_assignments_for_task(&task_id).await.unwrap();
+    assert_eq!(assignments.len(), 1);
+    assert_eq!(assignments[0].status, AssignmentStatus::Failed);
 }

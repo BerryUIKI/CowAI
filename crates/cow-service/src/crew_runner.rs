@@ -1,12 +1,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use chrono::Utc;
 use cow_agent::Crew;
 use cow_bus::EventBus;
 use cow_core::approval::ApprovalLevel;
 use cow_core::assignment::{AssignmentOrigin, AssignmentRequester};
 use cow_core::error::{CowError, CowResult};
 use cow_core::identity::WorkspaceId;
+use cow_core::run::{Run, RunStatus};
 use cow_core::task::TaskId;
 use cow_store::Store;
 
@@ -68,7 +70,13 @@ impl CrewRunner {
 
             let assignment = self
                 .assignments
-                .enqueue_root(&task, origin, requester.clone(), assignee, approval_level)
+                .enqueue_root(
+                    &task,
+                    origin,
+                    requester.clone(),
+                    assignee.clone(),
+                    approval_level,
+                )
                 .await?;
             self.assignments.start(&assignment.id).await?;
 
@@ -83,6 +91,10 @@ impl CrewRunner {
                 assignment.id.clone(),
             ));
             agent.set_tool_gate(Some(gate));
+
+            let run = Run::new(task.id.clone(), assignee.clone());
+            self.assignments.store().create_run(&run).await?;
+
             let execution = agent
                 .execute_task(&task, &context, self.assignments.bus())
                 .await;
@@ -90,10 +102,18 @@ impl CrewRunner {
 
             match execution {
                 Ok(output) => {
+                    self.assignments
+                        .store()
+                        .update_run_status(&run.id, RunStatus::Completed, Some(Utc::now()))
+                        .await?;
                     self.assignments.complete(&assignment.id, &output).await?;
                     completed.insert(task.id.clone(), output);
                 }
                 Err(error) => {
+                    self.assignments
+                        .store()
+                        .update_run_status(&run.id, RunStatus::Failed, Some(Utc::now()))
+                        .await?;
                     self.assignments
                         .fail(&assignment.id, error.to_string())
                         .await?;
