@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use chrono::Utc;
 use cow_agent::Crew;
 use cow_bus::EventBus;
@@ -8,8 +9,9 @@ use cow_core::approval::ApprovalLevel;
 use cow_core::assignment::{AssignmentOrigin, AssignmentRequester};
 use cow_core::error::{CowError, CowResult};
 use cow_core::identity::WorkspaceId;
-use cow_core::run::{Run, RunStatus};
+use cow_core::run::{Run, RunId, RunStatus, ToolCallRecord};
 use cow_core::task::TaskId;
+use cow_core::tool::{ToolCall, ToolCallRecorder, ToolResult};
 use cow_store::Store;
 
 use crate::approvals::{ApprovalService, ScopedApprovalGate};
@@ -94,10 +96,15 @@ impl CrewRunner {
 
             let run = Run::new(task.id.clone(), assignee.clone());
             self.assignments.store().create_run(&run).await?;
+            agent.set_tool_recorder(Some(Arc::new(RunToolCallRecorder {
+                store: self.assignments.store().clone(),
+                run_id: run.id.clone(),
+            })));
 
             let execution = agent
                 .execute_task(&task, &context, self.assignments.bus())
                 .await;
+            agent.clear_tool_recorder();
             agent.clear_tool_gate();
 
             match execution {
@@ -123,5 +130,31 @@ impl CrewRunner {
         }
 
         Ok(completed)
+    }
+}
+
+/// Persists tool calls under the run that produced them.
+struct RunToolCallRecorder {
+    store: Store,
+    run_id: RunId,
+}
+
+#[async_trait]
+impl ToolCallRecorder for RunToolCallRecorder {
+    async fn record_tool_call(
+        &self,
+        call: &ToolCall,
+        result: &ToolResult,
+        approved_by: Option<&str>,
+    ) -> CowResult<()> {
+        let mut record = ToolCallRecord::new(
+            self.run_id.clone(),
+            call.name.clone(),
+            call.arguments.clone(),
+        );
+        record.id = call.id.clone();
+        record.result = Some(serde_json::to_value(result).map_err(CowError::from)?);
+        record.approved_by = approved_by.map(str::to_string);
+        self.store.record_tool_call(&record).await
     }
 }

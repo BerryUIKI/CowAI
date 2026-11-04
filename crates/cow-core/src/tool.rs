@@ -83,3 +83,14 @@ pub trait ToolGate: Send + Sync {
         call: &ToolCall,
     ) -> Result<ToolAuthorization, CowError>;
 }
+
+/// Persists tool calls executed during an agent run.
+#[async_trait]
+pub trait ToolCallRecorder: Send + Sync {
+    async fn record_tool_call(
+        &self,
+        call: &ToolCall,
+        result: &ToolResult,
+        approved_by: Option<&str>,
+    ) -> Result<(), CowError>;
+}

@@ -3,7 +3,7 @@ use cow_core::agent::{AgentId, AgentProfile};
 use cow_core::error::{CowError, CowResult};
 use cow_core::event::{Event, EventPayload};
 use cow_core::task::Task;
-use cow_core::tool::{ToolAuthorization, ToolCall, ToolGate};
+use cow_core::tool::{ToolAuthorization, ToolCall, ToolCallRecorder, ToolGate};
 use cow_llm::{ChatCompletionRequest, ChatMessage, LlmProvider};
 use cow_tools::ToolRegistry;
 use std::sync::Arc;
@@ -16,6 +16,7 @@ pub struct AgentInstance {
     pub tools: ToolRegistry,
     pub model: String,
     tool_gate: Option<Arc<dyn ToolGate>>,
+    tool_recorder: Option<Arc<dyn ToolCallRecorder>>,
 }
 
 impl AgentInstance {
@@ -31,6 +32,7 @@ impl AgentInstance {
             tools,
             model: model.into(),
             tool_gate: None,
+            tool_recorder: None,
         }
     }
 
@@ -40,6 +42,14 @@ impl AgentInstance {
 
     pub fn clear_tool_gate(&mut self) {
         self.tool_gate = None;
+    }
+
+    pub fn set_tool_recorder(&mut self, recorder: Option<Arc<dyn ToolCallRecorder>>) {
+        self.tool_recorder = recorder;
+    }
+
+    pub fn clear_tool_recorder(&mut self) {
+        self.tool_recorder = None;
     }
 
     pub fn id(&self) -> &AgentId {
@@ -167,6 +177,12 @@ impl AgentInstance {
                     agent_id: self.profile.id.clone(),
                     result: tool_res.clone(),
                 }));
+
+                if let Some(recorder) = &self.tool_recorder {
+                    recorder
+                        .record_tool_call(&tool_call, &tool_res, None)
+                        .await?;
+                }
 
                 let tool_output = if tool_res.success {
                     tool_res.output
