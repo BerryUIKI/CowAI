@@ -205,6 +205,12 @@ impl ApprovalService {
         self.store.list_pending_approvals(task_id).await
     }
 
+    pub async fn pending_for_workspace(&self) -> CowResult<Vec<Approval>> {
+        self.store
+            .list_pending_approvals_for_workspace(&self.workspace_id)
+            .await
+    }
+
     /// Expire approvals left pending by a previous process.
     ///
     /// The local runtime should call this once during startup: a pending row
