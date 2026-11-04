@@ -67,7 +67,9 @@ Delivered:
 >
 > **Remaining within 1.1–1.5**: `AssignmentService` enforces the request, execution, and wake budgets, but the sequential crew runner only exercises the execution budget and there is no wake/re-entry scheduler for delegated work; `cowbot-client` local mode exists and powers the CLI, while the desktop UI and remote mode remain. These are tracked as the remaining tasks of 1.6.
 >
-> **1.6 progress**: the Tauri v2 shell and React frontend live in `desktop/`. The desktop now covers local session bootstrap, channel and message operations, live events, task creation/list/detail with assignment and run history, pending approval decisions, and desktop-initiated crew execution of a submitted task. Agents/templates management, settings, and packaging remain.
+> **1.6 progress**: the Tauri v2 shell and React frontend live in `desktop/`. The desktop now covers local session bootstrap, channel and message operations, live events, task creation/list/detail with assignment and run history, pending approval decisions, desktop-initiated crew execution of a submitted task, and a settings view for agents and templates. Settings for model selection and packaging remain.
+>
+> **1.7 progress**: `cowbot-package` implements the `.cowpkg` format from ADR-0004 — a verified ZIP container with a manifest, per-file SHA-256 checksums, and import that always creates a fresh workspace. `cowbot export` and `cowbot import` expose it from the CLI. Installer builds, first-run onboarding, and desktop import/export remain.
 
 ### 4.2 Phase 1 Exit Criteria
 

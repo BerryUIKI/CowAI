@@ -110,6 +110,19 @@ cargo run -p cowbot-cli -- --help
 cargo run -p cowbot-cli -- tools
 ```
 
+### Move a workspace between installations
+
+Workspaces travel as `.cowpkg` packages — verified ZIP archives that never carry
+credentials:
+
+```bash
+cargo run -p cowbot-cli -- export --output my-workspace.cowpkg --db cowbot.db
+cargo run -p cowbot-cli -- import --input my-workspace.cowpkg --db other.db
+```
+
+Import always creates a new workspace named `<original> (imported)`; existing
+workspaces are never modified or merged. See [the package format](docs/PACKAGE_FORMAT.md).
+
 ### Approval policies and execution boundaries
 
 `run --approval <ask|safe-auto|plan-only|trusted>` defaults to `ask`. Approval requests prompt `y/N` and decisions are persisted with the session user. Non-interactive callers should choose a policy deliberately; `ask` can wait for input, EOF rejects, and requests can time out. See [ADR 0003](docs/ADR/0003-risk-classification-and-approval.md) and [ADR 0008](docs/ADR/0008-cli-and-local-execution.md) for policy and execution semantics.
@@ -141,6 +154,7 @@ Nine focused crates keep the domain model, runtime, and application services sep
 | [`cowbot-agent`](crates/cowbot-agent) | Agent execution loops, roles, and crew orchestration |
 | [`cowbot-store`](crates/cowbot-store) | SQLite migrations, persistence, and repositories |
 | [`cowbot-client`](crates/cowbot-client) | Transport-neutral client and local backend shared by CLI and desktop |
+| [`cowbot-package`](crates/cowbot-package) | `.cowpkg` workspace packages with checksums and verified import |
 | [`cowbot-service`](crates/cowbot-service) | Local bootstrap, collaboration, templates, and assignment services |
 | [`cowbot-cli`](crates/cowbot-cli) | The `cowbot` command-line interface |
 
