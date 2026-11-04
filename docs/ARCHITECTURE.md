@@ -116,6 +116,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 
 ### 3.9 Access Layer
 
+- **Client abstraction**: `cow-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
 - **Desktop UI**: Tauri web frontend for channels, tasks, agents, approvals, and settings. All UI data access goes through `cow-client`, never directly through `cow-store` or `cow-service`.
 - **HTTP/WebSocket API**: `cow-server` serves desktop team mode, the CLI, and a future browser entry point.
 - **CLI**: `cowai` for initialization, diagnostics, headless runs, and debugging. It does not use `cow-service`, the store, or channel collaboration yet.
@@ -200,7 +201,7 @@ Inspired by Claude Code's permission modes:
 | `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
 | `cow-service` | Local bootstrap, channel/message services, assignment runtime, approval service, sequential crew runner, template management, and event wiring | Existing |
 | `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
-| `cow-client` | Unified local/remote client abstraction | Planned |
+| `cow-client` | Unified local/remote client abstraction | Existing (local mode) |
 | `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
 | `cow-desktop` | Tauri shell and frontend integration | Planned |
 | Frontend app | React + TypeScript (channels, tasks, approvals, agent management UI) | Planned |
