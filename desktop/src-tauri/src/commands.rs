@@ -1,17 +1,19 @@
-use cow_client::{Client, NewTask};
-use cow_core::agent::{AgentId, AgentProfile};
-use cow_core::approval::{Approval, ApprovalId, ApprovalLevel};
-use cow_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
-use cow_core::channel::{Channel, ChannelId, ChannelMessage};
-use cow_core::run::{Run, RunId, ToolCallRecord};
-use cow_core::task::{Task, TaskId};
-use cow_core::template::TemplateDocument;
+use cowbot_client::{Client, NewTask};
+use cowbot_core::agent::{AgentId, AgentProfile};
+use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
+use cowbot_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
+use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
+use cowbot_core::run::{Run, RunId, ToolCallRecord};
+use cowbot_core::task::{Task, TaskId};
+use cowbot_core::template::TemplateDocument;
 use tauri::State;
 
 use crate::AppState;
 
 #[tauri::command]
-pub async fn get_session(state: State<'_, AppState>) -> Result<cow_client::ClientSession, String> {
+pub async fn get_session(
+    state: State<'_, AppState>,
+) -> Result<cowbot_client::ClientSession, String> {
     state
         .client
         .session()

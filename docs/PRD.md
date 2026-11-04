@@ -145,7 +145,7 @@ CowBot follows a "single core, two forms" model:
 | Approval policy | Modes (Ask / SafeAuto / PlanOnly / Trusted); static risk levels (ReadOnly–Critical); optional LLM classifier that can only raise risk; tool/command/path allowlists |
 | Model configuration | OpenAI-compatible endpoints (cloud APIs and local models), connection test |
 | Persistence | SQLite (WAL) for workspaces, channels, messages, tasks, agent configuration, and approval records |
-| CLI | `cowai` retained for initialization, diagnostics, headless runs, and debugging |
+| CLI | `cowbot` retained for initialization, diagnostics, headless runs, and debugging |
 
 ### 5.2 P1 (Enhancements)
 

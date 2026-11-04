@@ -20,12 +20,12 @@ import {
   listTasks,
   listTemplates,
   listToolCalls,
-  onCowaiEvent,
+  onCowbotEvent,
   pendingApprovals,
   postMessage,
 } from "./api";
-import icon from "./assets/cowai-icon.svg";
-import wordmark from "./assets/cowai-wordmark-dark.svg";
+import icon from "./assets/cowbot-icon.svg";
+import wordmark from "./assets/cowbot-wordmark-dark.svg";
 import { formatTime } from "./format";
 import type {
   AgentProfile,
@@ -235,7 +235,7 @@ export default function App() {
     let cancelled = false;
     let unlisten: (() => void) | undefined;
 
-    onCowaiEvent((event) => {
+    onCowbotEvent((event) => {
       const type = event.payload.type;
       if (type === "ChannelCreated") {
         refreshChannels().catch((err) => setError(errorMessage(err)));
@@ -420,7 +420,7 @@ export default function App() {
   return (
     <div className="app">
       <aside className="sidebar">
-        <img className="wordmark" src={wordmark} alt="CowAI" />
+        <img className="wordmark" src={wordmark} alt="CowBot" />
 
         <div className="workspace">
           <span className="workspace-label">Workspace</span>

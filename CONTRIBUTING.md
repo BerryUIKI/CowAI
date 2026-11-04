@@ -4,7 +4,7 @@ Contributions to documentation, bug fixes, tests, and design discussions are wel
 
 ## Before starting
 
-Search existing [issues](https://github.com/BerryUIKI/CowAI/issues) and PRs. For a small correction, open a focused PR directly. For a new capability or architectural change, open an issue explaining the problem, proposed behavior, alternatives, and affected roadmap milestone. Follow the agreed Phase 1 design and discuss changes to scope or architecture before implementing new capabilities.
+Search existing [issues](https://github.com/BerryUIKI/CowBot/issues) and PRs. For a small correction, open a focused PR directly. For a new capability or architectural change, open an issue explaining the problem, proposed behavior, alternatives, and affected roadmap milestone. Follow the agreed Phase 1 design and discuss changes to scope or architecture before implementing new capabilities.
 
 Do not disclose vulnerabilities in public issues; follow [SECURITY.md](SECURITY.md).
 

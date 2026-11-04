@@ -37,8 +37,8 @@ export function postMessage(channelId: string, content: string): Promise<Channel
   return invoke<ChannelMessage>("post_message", { channelId, content });
 }
 
-export function onCowaiEvent(handler: (event: CowEvent) => void): Promise<UnlistenFn> {
-  return listen<CowEvent>("cowai-event", (event) => handler(event.payload));
+export function onCowbotEvent(handler: (event: CowEvent) => void): Promise<UnlistenFn> {
+  return listen<CowEvent>("cowbot-event", (event) => handler(event.payload));
 }
 
 export function listAgents(): Promise<AgentProfile[]> {

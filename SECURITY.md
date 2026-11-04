@@ -15,6 +15,6 @@ Run live tasks only in a disposable environment with restricted OS permissions a
 
 ## Reporting a vulnerability
 
-Do not post exploit details, credentials, or private data in a public issue. Use GitHub's private vulnerability reporting **if enabled** on the repository's [Security page](https://github.com/BerryUIKI/CowAI/security). If it is unavailable, open a public issue asking maintainers to establish a private reporting channel, without including vulnerability details. No dedicated security email is currently published.
+Do not post exploit details, credentials, or private data in a public issue. Use GitHub's private vulnerability reporting **if enabled** on the repository's [Security page](https://github.com/BerryUIKI/CowBot/security). If it is unavailable, open a public issue asking maintainers to establish a private reporting channel, without including vulnerability details. No dedicated security email is currently published.
 
 Once a private channel is available, include the affected revision, platform, minimal reproduction, expected and observed behavior, impact, and any suggested mitigation. Use synthetic data and redact secrets. Maintainers should acknowledge the report, coordinate a fix and disclosure with the reporter, and avoid publishing details before a mitigation is ready. Response timing depends on maintainer availability.

@@ -6,10 +6,10 @@ Keep shared visual assets here so documentation and future application surfaces 
 
 | File | Role |
 | --- | --- |
-| [`brand/cowai-icon.svg`](brand/cowai-icon.svg) | Original standalone icon, preserved unchanged. Hand-drawn cubic Bézier paths and geometric shapes, a transparent canvas, and a `1000 × 1000` viewBox. |
-| [`brand/cowai-icon.png`](brand/cowai-icon.png) | Retained `512 × 512` export on a warm light background (`#f4f3ee`). The README uses the transparent wordmarks below. |
-| [`brand/cowai-wordmark-light.svg`](brand/cowai-wordmark-light.svg) | Transparent horizontal README wordmark: monochrome cow and serif `CowBot` lettering in near-black (`#272622`). |
-| [`brand/cowai-wordmark-dark.svg`](brand/cowai-wordmark-dark.svg) | Matching README wordmark in warm white (`#f0eee7`) for dark backgrounds. |
+| [`brand/cowbot-icon.svg`](brand/cowbot-icon.svg) | Original standalone icon, preserved unchanged. Hand-drawn cubic Bézier paths and geometric shapes, a transparent canvas, and a `1000 × 1000` viewBox. |
+| [`brand/cowbot-icon.png`](brand/cowbot-icon.png) | Retained `512 × 512` export on a warm light background (`#f4f3ee`). The README uses the transparent wordmarks below. |
+| [`brand/cowbot-wordmark-light.svg`](brand/cowbot-wordmark-light.svg) | Transparent horizontal README wordmark: monochrome cow and serif `CowBot` lettering in near-black (`#272622`). |
+| [`brand/cowbot-wordmark-dark.svg`](brand/cowbot-wordmark-dark.svg) | Matching README wordmark in warm white (`#f0eee7`) for dark backgrounds. |
 
 The rounded cow head, eye patch, and two inspiration strokes form the icon. The artwork uses near-black (`#272622`) and white. Keep its proportions and clear space; the cow's white interior is intentional, while the SVG's exterior is transparent.
 
@@ -21,7 +21,7 @@ The README wordmarks are separate variants with a `618 × 164` viewBox, no backg
 2. If the standalone icon itself is intentionally revised in a future design change, regenerate its PNG rather than editing the export. With ImageMagick 7 and SVG support:
 
    ```bash
-   magick -background "#f4f3ee" assets/brand/cowai-icon.svg -resize 512x512 -depth 8 assets/brand/cowai-icon.png
+   magick -background "#f4f3ee" assets/brand/cowbot-icon.svg -resize 512x512 -depth 8 assets/brand/cowbot-icon.png
    ```
 
 3. Check the icon at small sizes and preview the README in light and dark themes. Keep the source, derived export, and references together in the same small PR targeting `dev`.
