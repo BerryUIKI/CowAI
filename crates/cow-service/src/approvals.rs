@@ -204,6 +204,39 @@ impl ApprovalService {
         self.store.list_pending_approvals(task_id).await
     }
 
+    /// Expire approvals left pending by a previous process.
+    ///
+    /// The local runtime should call this once during startup: a pending row
+    /// whose waiting agent died would otherwise stay actionable forever. Only
+    /// rows still pending are expired, so a decision that lands concurrently is
+    /// preserved. Returns the number of approvals expired.
+    pub async fn reconcile_on_startup(&self) -> CowResult<usize> {
+        let pending = self
+            .store
+            .list_pending_approvals_for_workspace(&self.workspace_id)
+            .await?;
+        let mut expired = 0;
+        for approval in pending {
+            let resolved = self.expire_or_load_decision(&approval.id).await?;
+            if resolved.status != ApprovalStatus::Expired {
+                continue;
+            }
+            expired += 1;
+            self.store
+                .append_audit_event(&AuditEvent::new(
+                    self.workspace_id.clone(),
+                    "system",
+                    "tool.approval_expired",
+                    format!(
+                        "approval {} for tool call {} expired on startup",
+                        approval.id, approval.tool_call_id
+                    ),
+                ))
+                .await?;
+        }
+        Ok(expired)
+    }
+
     async fn wait_for_decision(&self, approval_id: &ApprovalId) -> CowResult<Approval> {
         let deadline = Instant::now() + self.timeout;
         loop {
