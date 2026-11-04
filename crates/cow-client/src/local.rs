@@ -2,9 +2,13 @@ use std::path::Path;
 
 use async_trait::async_trait;
 use cow_bus::EventBus;
+use cow_core::agent::AgentProfile;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage, Sender};
-use cow_core::error::CowResult;
-use cow_service::{bootstrap_local, ApprovalService, AssignmentService, ChannelService};
+use cow_core::error::{CowError, CowResult};
+use cow_core::template::TemplateDocument;
+use cow_service::{
+    bootstrap_local, ApprovalService, AssignmentService, ChannelService, TemplateService,
+};
 use cow_store::Store;
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
@@ -13,9 +17,11 @@ use crate::{Client, ClientSession, ClientUser, EventStream};
 
 /// In-process client backed by `cow-store` and `cow-service`.
 pub struct LocalClient {
+    store: Store,
     bus: EventBus,
     session: ClientSession,
     channels: ChannelService,
+    templates: TemplateService,
 }
 
 impl LocalClient {
@@ -42,7 +48,8 @@ impl LocalClient {
             .reconcile_on_startup()
             .await?;
 
-        let channels = ChannelService::new(store, bus.clone());
+        let channels = ChannelService::new(store.clone(), bus.clone());
+        let templates = TemplateService::new(store.clone());
         let session = ClientSession {
             user: ClientUser {
                 id: context.user.id,
@@ -53,9 +60,11 @@ impl LocalClient {
         };
 
         Ok(Self {
+            store,
             bus,
             session,
             channels,
+            templates,
         })
     }
 
@@ -137,6 +146,45 @@ impl Client for LocalClient {
         limit: u32,
     ) -> CowResult<Vec<ChannelMessage>> {
         self.channels.list_messages(channel_id, limit).await
+    }
+
+    async fn list_templates(&self) -> CowResult<Vec<TemplateDocument>> {
+        self.templates.list().await
+    }
+
+    async fn get_template(&self, id: &str) -> CowResult<Option<TemplateDocument>> {
+        self.templates.get(id).await
+    }
+
+    async fn save_template(&self, document: &TemplateDocument) -> CowResult<()> {
+        self.templates.save(document).await
+    }
+
+    async fn delete_template(&self, id: &str) -> CowResult<()> {
+        self.templates.delete(id).await
+    }
+
+    async fn import_template(&self, json: &str) -> CowResult<TemplateDocument> {
+        self.templates.import_json(json).await
+    }
+
+    async fn export_template(&self, id: &str) -> CowResult<String> {
+        let document = self
+            .templates
+            .get(id)
+            .await?
+            .ok_or_else(|| CowError::Config(format!("template '{id}' was not found")))?;
+        TemplateService::export_json(&document)
+    }
+
+    async fn instantiate_agents(&self, template_id: &str) -> CowResult<Vec<AgentProfile>> {
+        self.templates
+            .instantiate_agents(&self.session.workspace.id, template_id)
+            .await
+    }
+
+    async fn list_agents(&self) -> CowResult<Vec<AgentProfile>> {
+        self.store.list_agents(&self.session.workspace.id).await
     }
 }
 

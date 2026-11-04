@@ -6,10 +6,12 @@
 //! directly (ADR-0001, ADR-0007).
 
 use async_trait::async_trait;
+use cow_core::agent::AgentProfile;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage};
 use cow_core::error::CowResult;
 use cow_core::event::Event;
 use cow_core::identity::{UserId, Workspace};
+use cow_core::template::TemplateDocument;
 use tokio::sync::mpsc;
 
 mod local;
@@ -77,4 +79,13 @@ pub trait Client: Send + Sync {
         channel_id: &ChannelId,
         limit: u32,
     ) -> CowResult<Vec<ChannelMessage>>;
+
+    async fn list_templates(&self) -> CowResult<Vec<TemplateDocument>>;
+    async fn get_template(&self, id: &str) -> CowResult<Option<TemplateDocument>>;
+    async fn save_template(&self, document: &TemplateDocument) -> CowResult<()>;
+    async fn delete_template(&self, id: &str) -> CowResult<()>;
+    async fn import_template(&self, json: &str) -> CowResult<TemplateDocument>;
+    async fn export_template(&self, id: &str) -> CowResult<String>;
+    async fn instantiate_agents(&self, template_id: &str) -> CowResult<Vec<AgentProfile>>;
+    async fn list_agents(&self) -> CowResult<Vec<AgentProfile>>;
 }
