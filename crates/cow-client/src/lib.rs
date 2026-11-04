@@ -8,11 +8,13 @@
 use async_trait::async_trait;
 use cow_core::agent::{AgentId, AgentProfile};
 use cow_core::approval::{Approval, ApprovalId, ApprovalLevel};
-use cow_core::assignment::Assignment;
+use cow_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
+use cow_core::audit::AuditEvent;
 use cow_core::channel::{Channel, ChannelId, ChannelMessage};
 use cow_core::error::CowResult;
 use cow_core::event::Event;
 use cow_core::identity::{UserId, Workspace};
+use cow_core::run::{Run, RunId, ToolCallRecord};
 use cow_core::task::{Task, TaskId};
 use cow_core::template::TemplateDocument;
 use tokio::sync::mpsc;
@@ -124,6 +126,15 @@ pub trait Client: Send + Sync {
     async fn get_task(&self, task_id: &TaskId) -> CowResult<Option<Task>>;
     async fn cancel_task(&self, task_id: &TaskId, reason: &str) -> CowResult<()>;
     async fn list_assignments(&self, task_id: &TaskId) -> CowResult<Vec<Assignment>>;
+
+    async fn list_runs(&self, task_id: &TaskId) -> CowResult<Vec<Run>>;
+    async fn get_run(&self, run_id: &RunId) -> CowResult<Option<Run>>;
+    async fn list_tool_calls(&self, run_id: &RunId) -> CowResult<Vec<ToolCallRecord>>;
+    async fn list_assignment_events(
+        &self,
+        assignment_id: &AssignmentId,
+    ) -> CowResult<Vec<AssignmentEvent>>;
+    async fn list_audit_events(&self, limit: u32) -> CowResult<Vec<AuditEvent>>;
 
     async fn pending_approvals(&self) -> CowResult<Vec<Approval>>;
     async fn decide_approval(
