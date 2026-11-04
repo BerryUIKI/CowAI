@@ -101,6 +101,9 @@ pub trait Client: Send + Sync {
     async fn session(&self) -> CowResult<ClientSession>;
 
     /// Subscribe to live platform events.
+    ///
+    /// Local mode starts a forwarding task, so call this from within a Tokio
+    /// runtime context.
     fn subscribe(&self) -> EventStream;
 
     async fn list_channels(&self) -> CowResult<Vec<Channel>>;

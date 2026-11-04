@@ -18,8 +18,9 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             let db_path = data_dir.join("cowai.db");
             let client = tauri::async_runtime::block_on(LocalClient::open(&db_path))?;
-
-            let mut events = client.subscribe();
+            // Local mode spawns the forwarding task, so subscribe must run
+            // inside the runtime context.
+            let mut events = tauri::async_runtime::block_on(async { client.subscribe() });
             let handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 while let Some(event) = events.recv().await {
