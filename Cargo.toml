@@ -6,6 +6,7 @@ members = [
     "crates/cow-llm",
     "crates/cow-agent",
     "crates/cow-store",
+    "crates/cow-client",
     "crates/cow-service",
     "crates/cow-cli",
 ]

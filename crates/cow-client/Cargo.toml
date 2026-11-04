@@ -1,0 +1,18 @@
+[package]
+name = "cow-client"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+cow-core = { workspace = true }
+cow-bus = { workspace = true }
+cow-store = { workspace = true }
+cow-service = { workspace = true }
+tokio = { workspace = true }
+async-trait = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true }
