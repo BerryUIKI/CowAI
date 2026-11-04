@@ -3,11 +3,11 @@
 - **Status**: Accepted (deployment form delegated to the implementation by the user)
 - **Date**: 2026-11-03
 - **Related**: `docs/PRD.md` §2.7
-- **Decision makers**: CowAI project
+- **Decision makers**: CowBot project
 
 ## Context
 
-CowAI must satisfy three requirements at once:
+CowBot must satisfy three requirements at once:
 
 1. **Offline personal use**: no external server, with data staying on the local machine.
 2. **Team/enterprise self-hosting**: multiple users, shared workspaces, private-network deployment.

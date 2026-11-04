@@ -1,4 +1,4 @@
-# CowAI Template Format
+# CowBot Template Format
 
 > **Status**: Draft v0.1
 > **Date**: 2026-11-03
@@ -6,7 +6,7 @@
 
 ## Overview
 
-CowAI templates describe reusable agent and team configurations. They are JSON documents with a versioned schema, stored as `.cowtemplate` files when exported. Built-in templates are compiled into the binary; user templates are stored in SQLite and can be imported or exported without a server.
+CowBot templates describe reusable agent and team configurations. They are JSON documents with a versioned schema, stored as `.cowtemplate` files when exported. Built-in templates are compiled into the binary; user templates are stored in SQLite and can be imported or exported without a server.
 
 ## Document Schema
 

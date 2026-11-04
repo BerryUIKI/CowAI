@@ -1,8 +1,8 @@
-# CowAI Design References
+# CowBot Design References
 
 > **Status**: Draft v0.1
 > **Date**: 2026-11-03
-> **Purpose**: Record the external projects whose patterns shape CowAI, and which ideas we adopt, defer, or deliberately reject.
+> **Purpose**: Record the external projects whose patterns shape CowBot, and which ideas we adopt, defer, or deliberately reject.
 
 ---
 
@@ -16,7 +16,7 @@ CrewAI is the primary reference for role-based multi-agent orchestration:
 - **Tasks** declare an expected output and can depend on earlier tasks; context flows downstream.
 - **Crews** group agents and tasks under a process (sequential first, hierarchical later).
 
-CowAI already mirrors this in `AgentProfile`, `Task`, `Crew`, and the built-in software/research team templates. The roadmap keeps sequential crews for v1 and defers hierarchical/DAG orchestration to P1.
+CowBot already mirrors this in `AgentProfile`, `Task`, `Crew`, and the built-in software/research team templates. The roadmap keeps sequential crews for v1 and defers hierarchical/DAG orchestration to P1.
 
 ---
 
@@ -30,7 +30,7 @@ Mattermost is the reference for channel-native collaboration:
 - Humans and agents share the same timeline; messages, tasks, and decisions are traceable.
 - Multi-user workspaces and permissions are first-class.
 
-CowAI adopts the channel/thread model (`Channel`, `ChannelMessage`, `Sender`) and builds the local runtime on top of it. The desktop app is the first client; team mode adds the self-hosted server later.
+CowBot adopts the channel/thread model (`Channel`, `ChannelMessage`, `Sender`) and builds the local runtime on top of it. The desktop app is the first client; team mode adds the self-hosted server later.
 
 ---
 
@@ -40,7 +40,7 @@ Repository: <https://github.com/milind-soni/OpenMausBot>
 
 OpenMausBot is an open-source, local-first desktop app that presents a roster of bots as chat contacts. Each bot runs a local Claude/Codex/Grok-class CLI or API model and has its own personality, model, computer, connected apps, memory, and approval level. Key documents: `docs/runtime-contract.md`, `docs/approval-levels.md`, `docs/memory.md`, `docs/bot-box.md`, `docs/team-sharing.md`, `docs/tool-selection.md`, `docs/decision-model.md`.
 
-It validates several CowAI choices: messaging-app UX, channel/department structure, per-agent models, inline approval cards, local-first data, and portable team packages. The patterns below are the most valuable; they are recommendations, not requirements.
+It validates several CowBot choices: messaging-app UX, channel/department structure, per-agent models, inline approval cards, local-first data, and portable team packages. The patterns below are the most valuable; they are recommendations, not requirements.
 
 ### 3.1 Assignment runtime contract
 
@@ -57,7 +57,7 @@ OpenMausBot uses one record per delegated job, whatever started it (person, rout
 
 Lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes the row and its event in one transaction. Budgets (`requests`, `executions`, `wakes`) renew only on durable progress; two continuations without a successful tool call, or three identical errors, fail the node as stalled. Restart reconciliation reruns a cut turn at most once and never reruns a turn that already acted outward. Invariants include: no result delivered twice, one wake per result, and no "approved" without an allow.
 
-**CowAI implementation (Phase 1.4)**: the simplified assignment tree is implemented:
+**CowBot implementation (Phase 1.4)**: the simplified assignment tree is implemented:
 
 - Extend tasks with `root_id`, `parent_id`, `depth`, `origin`, `requester`, `mode`, `reply`, `status`, `executions`, `restarts`.
 - Persist an append-only `assignment_events` table; every state change is transactional.
@@ -71,13 +71,13 @@ This is more work than a flat sequential crew, but it prevents the rewrite that 
 
 OpenMausBot offers per-bot and per-thread levels: **Ask for approval**, **Auto-accept edits**, **Approve for me**, and **Full access**, plus a Codex-specific custom mode. Changes apply mid-turn where the engine allows it. Delegated work inherits the Chief's level under `level = max(own, inherited)`, capped by what the engine actually supports. A bot reading its own files never asks; everything else needs an explicit grant. Full access still does not bypass OS privacy, authentication, MFA, or workspace ownership. The decision log records who approved what.
 
-**CowAI implementation (Phase 1.5)**: approval levels are stored per assignment and inherited for delegated work (`inherit_approval_level`). The static risk classifier, approval service, and `ToolGate` enforcement are implemented. Saved exact-command grants and per-thread overrides remain future work.
+**CowBot implementation (Phase 1.5)**: approval levels are stored per assignment and inherited for delegated work (`inherit_approval_level`). The static risk classifier, approval service, and `ToolGate` enforcement are implemented. Saved exact-command grants and per-thread overrides remain future work.
 
-| CowAI mode | OpenMausBot analogue | Notes |
+| CowBot mode | OpenMausBot analogue | Notes |
 | --- | --- | --- |
 | Ask | Ask for approval | Default for unknown/risky operations |
 | SafeAuto | Auto-accept edits / Approve for me | Split later if the policy engine needs it |
-| PlanOnly | (CowAI-specific) | Read-only planning and investigation |
+| PlanOnly | (CowBot-specific) | Read-only planning and investigation |
 | Trusted | Full access | Admin-enabled, audited, still blocks Critical |
 
 Add per-task/per-thread overrides, `max(own, inherited)` for delegated work, saved exact-command grants, and auto-allow for reading the agent's own workspace. Keep the static risk floor from ADR-0003; OpenMausBot's provider-level modes inform UX, not our safety boundary.
@@ -86,7 +86,7 @@ Add per-task/per-thread overrides, `max(own, inherited)` for delegated work, sav
 
 OpenMausBot cloud homes run every bot turn in a bubblewrap sandbox with mount, PID, and network namespaces, an egress proxy that only reaches public addresses, a harness gate that exposes only `/api/internal/*`, an environment allowlist, per-process capability tokens, a credential broker, and a seccomp filter. A self-check probes what a hostile bot can and cannot do.
 
-**CowAI recommendation (Phase 3)**: keep the v1 subprocess sandbox, but design `SandboxBackend` for these layers:
+**CowBot recommendation (Phase 3)**: keep the v1 subprocess sandbox, but design `SandboxBackend` for these layers:
 
 - workspace-only mounts, separate temp/PID namespace;
 - egress policy (public-only proxy or no network);
@@ -100,13 +100,13 @@ Do not claim container-grade isolation until these are implemented and tested.
 
 OpenMausBot stores memory as plain Markdown: `MEMORY.md` (first 200 lines or 24 KB loaded each turn), topic files read on demand, daily logs, deterministic recall before a turn, quiet-time capture/upkeep, secret redaction, and atomic writes.
 
-**CowAI recommendation (P1)**: keep v1 memory as session plus channel/task history, then adopt a transparent Markdown-based project memory with an explicit load budget, on-demand topic files, recall, and redaction. Avoid opaque vector-only memory until users can inspect and edit it.
+**CowBot recommendation (P1)**: keep v1 memory as session plus channel/task history, then adopt a transparent Markdown-based project memory with an explicit load budget, on-demand topic files, recall, and redaction. Avoid opaque vector-only memory until users can inspect and edit it.
 
 ### 3.5 Team sharing
 
 OpenMausBot shares a whole department as one file: bots, skills, playbooks, group chats, shared instructions, routines, connection slots, and optional starter notes. The format has no field for secrets, chat history, models, computers, or visibility. Import is additive; routines arrive paused, skills off, connections disabled; a redaction scan runs before export; package ids and versions make re-sharing a new release.
 
-**CowAI recommendation (already partly in ADR-0004)**: adopt the safety properties for `.cowtemplate` and `.cowpkg`:
+**CowBot recommendation (already partly in ADR-0004)**: adopt the safety properties for `.cowtemplate` and `.cowpkg`:
 
 - additive import only; never mutate existing records;
 - safe defaults on import (approval Ask, tools disabled, no credentials);
@@ -118,27 +118,27 @@ OpenMausBot shares a whole department as one file: bots, skills, playbooks, grou
 
 OpenMausBot lets a bot keep all tools, allow only listed tools, or exclude listed tools; selectors are exact names or namespaced wildcards, and an empty allow list selects no tools. For large catalogs it offers a tool bridge: `find_tool(query)` and `use_tool(name, arguments)` reduce the prompt from 43–57 KB to about 15 KB without changing what the turn may call.
 
-**CowAI recommendation (P1/P2)**: add allow/exclude tool selection per agent, with no fallback to "all tools". If the registry grows large (MCP/plugins), add a tool search bridge that routes through the same permission checks as a direct call.
+**CowBot recommendation (P1/P2)**: add allow/exclude tool selection per agent, with no fallback to "all tools". If the registry grows large (MCP/plugins), add a tool search bridge that routes through the same permission checks as a direct call.
 
 ### 3.7 Messaging UX and routing
 
 OpenMausBot treats bots as contacts, groups them into departments, gives each channel its own roster, shared instructions, working folder, and responder rules, and can route unmentioned messages with a fast decision model that fails open to the channel lead.
 
-**CowAI recommendation**: keep channels and threads as the primary surface; add per-channel agent rosters and shared instructions in Phase 1.6/2. Defer automatic routing/decision models until channels have enough traffic to justify them.
+**CowBot recommendation**: keep channels and threads as the primary surface; add per-channel agent rosters and shared instructions in Phase 1.6/2. Defer automatic routing/decision models until channels have enough traffic to justify them.
 
 ### 3.8 What not to copy
 
-- **Electron** — CowAI uses Tauri.
-- **Wrapping provider CLIs as the core engine** — CowAI keeps the `LlmProvider` abstraction, so any OpenAI-compatible model or local model works.
-- **Cloud VMs, phone clients, voice calls, biometric flows** — outside CowAI's local-first scope.
-- **The full provider permission-mode matrix** — CowAI has one policy model (ADR-0003); provider quirks should not leak into the domain.
+- **Electron** — CowBot uses Tauri.
+- **Wrapping provider CLIs as the core engine** — CowBot keeps the `LlmProvider` abstraction, so any OpenAI-compatible model or local model works.
+- **Cloud VMs, phone clients, voice calls, biometric flows** — outside CowBot's local-first scope.
+- **The full provider permission-mode matrix** — CowBot has one policy model (ADR-0003); provider quirks should not leak into the domain.
 - **Unbounded runtime complexity** — adopt the assignment record and invariants, not every edge-case rule from a mature multi-provider product.
 
 ---
 
 ## 4. Adoption Summary
 
-| Idea | Source | CowAI phase | Decision |
+| Idea | Source | CowBot phase | Decision |
 | --- | --- | --- | --- |
 | Role/goal/backstory agents, task dependencies | CrewAI | Done | Adopted |
 | Channels, threads, multi-user workspaces | Mattermost | In progress | Adopted |

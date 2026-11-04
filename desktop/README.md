@@ -1,4 +1,4 @@
-# CowAI Desktop
+# CowBot Desktop
 
 Tauri v2 shell with a React + TypeScript frontend. The Rust backend is a
 standalone Cargo project (outside the root workspace) and reaches the local
