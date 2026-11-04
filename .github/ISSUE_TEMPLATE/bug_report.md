@@ -18,7 +18,7 @@ Provide minimal steps and input using synthetic data.
 
 ## Environment
 
-- CowAI commit/version:
+- CowBot commit/version:
 - OS and shell:
 - Rust/Cargo version:
 - Provider/model (if relevant; no credentials):

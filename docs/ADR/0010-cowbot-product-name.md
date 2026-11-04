@@ -1,6 +1,6 @@
 # 0010: CowBot product name
 
-- Status: Accepted for documentation; software implementation pending
+- Status: Implemented; see ADR 0011 for the software rename
 - Date: 2026-11-04
 - Decision: Adopt CowBot as the product name at the owner's request.
 

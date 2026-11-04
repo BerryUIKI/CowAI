@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cowai-wordmark-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="assets/brand/cowai-wordmark-light.svg">
-    <img src="assets/brand/cowai-wordmark-light.svg" alt="CowBot — a cow icon beside serif lettering" width="440">
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/cowbot-wordmark-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/brand/cowbot-wordmark-light.svg">
+    <img src="assets/brand/cowbot-wordmark-light.svg" alt="CowBot — a cow icon beside serif lettering" width="440">
   </picture>
 </p>
 
@@ -49,16 +49,16 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 
 ## Naming and compatibility
 
-**CowBot** is the new product name used in this documentation. The software rename will be implemented separately: the current executable and help output still use `cowai`, and the current desktop may still display CowAI. Commands below intentionally match the existing software.
+**CowBot** is the product and software name. The executable is `cowbot`, the desktop bundle and window use CowBot, local storage defaults to `cowbot.db`, and the database environment variable is `COWBOT_DB`.
 
-The GitHub repository remains at `BerryUIKI/CowAI`. Crate/package names, `COWAI_DB`, `cowai.db`, the desktop identifier `com.cowai.desktop`, internal `cowai-event` channel, and existing asset filenames remain unchanged. Documentation wordmarks show CowBot; application assets will be updated by the implementation team.
+The CLI rename is a clean break: it no longer reads `COWAI_DB` or falls back to `cowai.db`. Rename an existing database (`mv cowai.db cowbot.db`) or pass `--db`. The desktop application copies a database from the previous `com.cowai.desktop` app-data directory on first launch, so existing desktop data is preserved automatically.
 
 ## Quick start
 
 Install the [Rust toolchain](https://rustup.rs/), then build from the integration branch:
 
 ```bash
-git clone --branch dev https://github.com/BerryUIKI/CowAI.git CowBot
+git clone --branch dev https://github.com/BerryUIKI/CowBot.git CowBot
 cd CowBot
 cargo build --workspace --locked
 ```
@@ -66,17 +66,17 @@ cargo build --workspace --locked
 ### Initialize local storage
 
 ```sh
-cargo run -p cow-cli -- init --db cowai.db
+cargo run -p cowbot-cli -- init --db cowbot.db
 ```
 
-Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWAI_DB`, then `cowai.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
+Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWBOT_DB`, then `cowbot.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
 
 ### Try an agent crew offline
 
 The mock provider runs without an API key. It echoes mock deliverables through the three-task pipeline; it does not implement the requested program. Dry runs still initialize storage and record run history:
 
 ```bash
-cargo run -p cow-cli -- run \
+cargo run -p cowbot-cli -- run \
   --task "Plan a REST API for a task tracker" \
   --dry-run
 ```
@@ -87,7 +87,7 @@ With an OpenAI API key, run a task against a live model:
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
-cargo run -p cow-cli -- run \
+cargo run -p cowbot-cli -- run \
   --task "Implement a snake game in Python" \
   --model gpt-4o
 ```
@@ -95,7 +95,7 @@ cargo run -p cow-cli -- run \
 For a local Ollama endpoint, use an installed model:
 
 ```bash
-cargo run -p cow-cli -- run \
+cargo run -p cowbot-cli -- run \
   --task "Analyze log files" \
   --base-url "http://localhost:11434/v1" \
   --model "llama3"
@@ -106,8 +106,8 @@ These examples use a POSIX shell. In PowerShell, set the key with `$env:OPENAI_A
 ### Explore the CLI
 
 ```bash
-cargo run -p cow-cli -- --help
-cargo run -p cow-cli -- tools
+cargo run -p cowbot-cli -- --help
+cargo run -p cowbot-cli -- tools
 ```
 
 ### Approval policies and execution boundaries
@@ -128,21 +128,21 @@ Install Node.js/npm and the platform's Tauri native prerequisites first; see [De
 
 ## Architecture
 
-![Current local runtime: CLI and desktop use cow-client; services persist state and coordinate approvals and agents.](docs/assets/architecture.svg)
+![Current local runtime: CLI and desktop use cowbot-client; services persist state and coordinate approvals and agents.](docs/assets/architecture.svg)
 
 Nine focused crates keep the domain model, runtime, and application services separate:
 
 | Crate | Responsibility |
 | --- | --- |
-| [`cow-core`](crates/cow-core) | Domain models, assignments, tools, and events |
-| [`cow-bus`](crates/cow-bus) | Tokio broadcast event bus and in-memory event history |
-| [`cow-tools`](crates/cow-tools) | Tool registry, subprocess sandbox, and file tools |
-| [`cow-llm`](crates/cow-llm) | OpenAI-compatible client and mock providers |
-| [`cow-agent`](crates/cow-agent) | Agent execution loops, roles, and crew orchestration |
-| [`cow-store`](crates/cow-store) | SQLite migrations, persistence, and repositories |
-| [`cow-client`](crates/cow-client) | Transport-neutral client and local backend shared by CLI and desktop |
-| [`cow-service`](crates/cow-service) | Local bootstrap, collaboration, templates, and assignment services |
-| [`cow-cli`](crates/cow-cli) | The `cowai` command-line interface |
+| [`cowbot-core`](crates/cowbot-core) | Domain models, assignments, tools, and events |
+| [`cowbot-bus`](crates/cowbot-bus) | Tokio broadcast event bus and in-memory event history |
+| [`cowbot-tools`](crates/cowbot-tools) | Tool registry, subprocess sandbox, and file tools |
+| [`cowbot-llm`](crates/cowbot-llm) | OpenAI-compatible client and mock providers |
+| [`cowbot-agent`](crates/cowbot-agent) | Agent execution loops, roles, and crew orchestration |
+| [`cowbot-store`](crates/cowbot-store) | SQLite migrations, persistence, and repositories |
+| [`cowbot-client`](crates/cowbot-client) | Transport-neutral client and local backend shared by CLI and desktop |
+| [`cowbot-service`](crates/cowbot-service) | Local bootstrap, collaboration, templates, and assignment services |
+| [`cowbot-cli`](crates/cowbot-cli) | The `cowbot` command-line interface |
 
 Read the [functional and system architecture](docs/ARCHITECTURE.md) for the planned desktop and server boundaries.
 
@@ -178,7 +178,7 @@ cargo test --workspace
 
 Keep contributions small and focused. Branch from `dev` using `feature/<name>` and open pull requests against `dev`. `main` is the release branch; releases are promoted separately. Repository documentation, code, and commit messages use English. See [CLAUDE.md](CLAUDE.md) for development conventions.
 
-Report reproducible bugs and discuss proposals through [GitHub Issues](https://github.com/BerryUIKI/CowAI/issues). Follow the [Code of Conduct](CODE_OF_CONDUCT.md); use [Security](SECURITY.md) for vulnerability reporting. Maintainers can use the [release checklist](docs/RELEASING.md).
+Report reproducible bugs and discuss proposals through [GitHub Issues](https://github.com/BerryUIKI/CowBot/issues). Follow the [Code of Conduct](CODE_OF_CONDUCT.md); use [Security](SECURITY.md) for vulnerability reporting. Maintainers can use the [release checklist](docs/RELEASING.md).
 
 ## License
 

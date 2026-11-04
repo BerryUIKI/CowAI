@@ -38,10 +38,10 @@ No calendar dates are committed; a phase ships when its exit criteria are met.
 
 Delivered:
 
-- Cargo workspace with `cow-core`, `cow-bus`, `cow-tools`, `cow-llm`, `cow-agent`, and `cow-cli`.
+- Cargo workspace with `cowbot-core`, `cowbot-bus`, `cowbot-tools`, `cowbot-llm`, `cowbot-agent`, and `cowbot-cli`.
 - Sequential agent crew with a tool-calling loop and a working subprocess code sandbox.
 - OpenAI-compatible and mock LLM providers.
-- `cowai` CLI with `run` and `tools` commands.
+- `cowbot` CLI with `run` and `tools` commands.
 - PRD, functional/system architecture, and ADRs 0001–0005.
 - Passing tests, clippy, and formatting checks.
 
@@ -55,17 +55,17 @@ Delivered:
 
 | ID | Milestone | Key Deliverables | Depends On |
 | --- | --- | --- | --- |
-| 1.1 | Persistence foundation (`cow-store`) | SQLite schema and migrations; repositories for users, workspaces, channels, messages, agents, templates, tasks, runs, tool calls, approvals, audit; WAL and transactional writes; store tests | Phase 0 |
+| 1.1 | Persistence foundation (`cowbot-store`) | SQLite schema and migrations; repositories for users, workspaces, channels, messages, agents, templates, tasks, runs, tool calls, approvals, audit; WAL and transactional writes; store tests | Phase 0 |
 | 1.2 | Local identity and workspace | Local owner bootstrap; default workspace; channel/thread/message persistence; event bus wired to storage | 1.1 |
 | 1.3 | Agent templates and configuration | Template JSON schema; built-in templates compiled in; template CRUD and validation; `.cowtemplate` import/export | 1.1 |
 | 1.4 | Task orchestration | Assignment runtime (root/parent/depth tree, lifecycle, event log, budgets, stall guard, restart reconciliation); sequential crew on assignments; context chaining; cancellation and failure handling | 1.2, 1.3 |
 | 1.5 | Tools, sandbox, and approvals | Static risk classifier; Ask/SafeAuto/PlanOnly/Trusted modes; approval cards and audit records; code/file tools with limits | 1.2, 1.4 |
-| 1.6 | Desktop shell and UI | Tauri shell; React + TypeScript UI for channels, tasks, agents, approvals, templates, and settings; local `cow-client` | 1.2–1.5 |
+| 1.6 | Desktop shell and UI | Tauri shell; React + TypeScript UI for channels, tasks, agents, approvals, templates, and settings; local `cowbot-client` | 1.2–1.5 |
 | 1.7 | Packaging and data exchange | Windows/macOS/Linux builds; `.cowpkg` workspace export/import; first-run onboarding; user documentation | 1.6 |
 
-> **Progress**: milestones 1.1–1.5 are implemented — `cow-store` provides embedded SQLite migrations and repositories, `cow-service` provides idempotent local bootstrap, channel/message persistence wired to the event bus, the assignment runtime with event-sourced lifecycle/restart reconciliation, a sequential crew runner, the static risk classifier with approval gates and audit records, and validated built-in templates with `.cowtemplate` import/export.
+> **Progress**: milestones 1.1–1.5 are implemented — `cowbot-store` provides embedded SQLite migrations and repositories, `cowbot-service` provides idempotent local bootstrap, channel/message persistence wired to the event bus, the assignment runtime with event-sourced lifecycle/restart reconciliation, a sequential crew runner, the static risk classifier with approval gates and audit records, and validated built-in templates with `.cowtemplate` import/export.
 >
-> **Remaining within 1.1–1.5**: `AssignmentService` enforces the request, execution, and wake budgets, but the sequential crew runner only exercises the execution budget and there is no wake/re-entry scheduler for delegated work; `cow-client` local mode exists and powers the CLI, while the desktop UI and remote mode remain. These are tracked as the remaining tasks of 1.6.
+> **Remaining within 1.1–1.5**: `AssignmentService` enforces the request, execution, and wake budgets, but the sequential crew runner only exercises the execution budget and there is no wake/re-entry scheduler for delegated work; `cowbot-client` local mode exists and powers the CLI, while the desktop UI and remote mode remain. These are tracked as the remaining tasks of 1.6.
 >
 > **1.6 progress**: the Tauri v2 shell and React frontend live in `desktop/`. The desktop now covers local session bootstrap, channel and message operations, live events, task creation/list/detail with assignment and run history, and pending approval decisions. Agents/templates management, settings, desktop-initiated task execution, and packaging remain.
 
@@ -98,9 +98,9 @@ Delivered:
 
 | ID | Milestone | Key Deliverables | Depends On |
 | --- | --- | --- | --- |
-| 2.1 | Server and API foundation (`cow-server`) | HTTP + WebSocket API; Argon2id accounts; opaque sessions; API tokens; error model; login rate limiting | Phase 1 |
+| 2.1 | Server and API foundation (`cowbot-server`) | HTTP + WebSocket API; Argon2id accounts; opaque sessions; API tokens; error model; login rate limiting | Phase 1 |
 | 2.2 | Multi-user workspaces | Workspace creation; invitations; Owner/Admin/Member roles; membership enforcement; audit integration | 2.1 |
-| 2.3 | Remote client mode | `cow-client` remote implementation; desktop sign-in and server connection; reconnection; local/team mode switch | 2.1, 2.2 |
+| 2.3 | Remote client mode | `cowbot-client` remote implementation; desktop sign-in and server connection; reconnection; local/team mode switch | 2.1, 2.2 |
 | 2.4 | Deployment and operations | Single binary and Docker image; Compose example; TLS via reverse proxy; health checks; backup/restore; configuration reference | 2.1 |
 | 2.5 | Migration and compatibility | `.cowpkg` import into the server; server-side schema migrations; version compatibility policy | 2.2, 2.4 |
 
@@ -182,7 +182,7 @@ Phase 2: 2.1 Server/API --> 2.2 Multi-user --> 2.3 Remote client
 Phase 3 workstreams (parallel, prioritized with users)
 ```
 
-Critical path: `cow-store` → identity/workspace → orchestration → approvals → desktop UI → packaging. Delaying persistence or approvals blocks most later work.
+Critical path: `cowbot-store` → identity/workspace → orchestration → approvals → desktop UI → packaging. Delaying persistence or approvals blocks most later work.
 
 ---
 
@@ -193,7 +193,7 @@ Critical path: `cow-store` → identity/workspace → orchestration → approval
 | Scope creep in Phase 1 | Delays offline MVP | Strict exit criteria; explicitly deferred list; small atomic PRs |
 | Sandbox escape or destructive commands | Security incident | Static risk rules first; approval gates; limited working directory; container backend in Phase 3 |
 | Model/provider API changes | Broken agent runs | Provider abstraction; OpenAI-compatible baseline; mock provider for tests |
-| Tauri or React ecosystem churn | Packaging and UI delays | Pin versions; isolate the UI behind `cow-client`; keep the core independent |
+| Tauri or React ecosystem churn | Packaging and UI delays | Pin versions; isolate the UI behind `cowbot-client`; keep the core independent |
 | Cross-platform packaging issues | Poor first-run experience | Early CI builds for Windows/macOS/Linux; smoke tests per release |
 | Multi-user auth complexity | Phase 2 delays | Opaque sessions and simple RBAC first; OIDC deferred |
 | Local/team data divergence | User confusion | Explicit import/export; no bidirectional sync in v1; documented migration path |

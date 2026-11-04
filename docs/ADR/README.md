@@ -13,7 +13,9 @@ These records accompany the [architecture](../ARCHITECTURE.md). A decision descr
 | [0007](0007-client-api.md) | Client API |
 | [0008](0008-cli-and-local-execution.md) | CLI and local execution |
 | [0009](0009-desktop-ipc-and-state.md) | Desktop IPC and state |
+| [0010](0010-cowbot-product-name.md) | CowBot product name |
+| [0011](0011-cowbot-software-rename.md) | CowBot software rename |
 
 For a new decision, copy [the template](TEMPLATE.md), assign the next unused four-digit number, and use a descriptive English filename. Discuss it in a linked issue/PR. Record context, alternatives, consequences, and status; do not silently rewrite an accepted decision when direction changes. Add a superseding record and link both records instead.
 
-Product naming: [0010: CowBot product name](0010-cowbot-product-name.md).
+Product naming: [0010: CowBot product name](0010-cowbot-product-name.md) and [0011: CowBot software rename](0011-cowbot-software-rename.md).
