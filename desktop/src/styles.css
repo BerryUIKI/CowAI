@@ -803,6 +803,13 @@ button {
   font-size: 11px;
 }
 
+.task-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
 .danger-button {
   flex: none;
   padding: 8px 12px;

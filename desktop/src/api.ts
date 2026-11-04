@@ -73,6 +73,20 @@ export function listTasks(): Promise<Task[]> {
   return invoke<Task[]>("list_tasks");
 }
 
+export function runTask(taskId: string, approvalLevel: ApprovalLevel): Promise<void> {
+  return invoke<void>("run_task", { taskId, approvalLevel });
+}
+
+export interface RunFinished {
+  task_id: string;
+  ok: boolean;
+  error: string | null;
+}
+
+export function onRunFinished(handler: (event: RunFinished) => void): Promise<UnlistenFn> {
+  return listen<RunFinished>("cowbot-run-finished", (event) => handler(event.payload));
+}
+
 export function cancelTask(taskId: string, reason: string): Promise<void> {
   return invoke<void>("cancel_task", { taskId, reason });
 }
