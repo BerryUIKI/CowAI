@@ -43,6 +43,23 @@ The backend subscribes to `Client::subscribe` once at startup and forwards every
 
 The first slice renders the workspace, channel list, message timeline, and composer. Tasks, approvals, agents/templates, and settings are follow-up slices. Future execution work keeps `LocalClient::run_crew` on the Rust side; the UI will start runs through commands, never by building a crew in the frontend.
 
+### 6. Desktop execution
+
+The `run_task` command starts the standard Planner/Coder/Reviewer crew with the
+submitted task's description as the objective. It returns as soon as the run is
+spawned on `tauri::async_runtime`; the outcome arrives later on a second Tauri
+event channel, `cowbot-run-finished`, carrying `{ task_id, ok, error }`. The
+existing `cowbot-event` channel continues to carry the crew's domain events.
+
+The crew's LLM provider and tool registry are built once at startup and shared
+through `AppState`: `OPENAI_API_KEY` or `OPENAI_BASE_URL` selects the
+OpenAI-compatible provider, otherwise the mock provider runs offline. File tools
+are rooted at the app data directory.
+
+A task id is tracked in a `running` set for the duration of its run; a second
+`run_task` for the same id is rejected. Cancelling an in-flight crew is not
+supported yet — the UI disables Cancel while a task is running.
+
 ## Consequences
 
 - The desktop app and CLI share `cow-client` but keep independent SQLite files.
