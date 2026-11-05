@@ -18,6 +18,7 @@ import type {
   Task,
   TemplateDocument,
   ToolCallRecord,
+  WorkspaceSummary,
 } from "./types";
 
 export function getSession(): Promise<ClientSession> {
@@ -174,4 +175,20 @@ export function getOnboardingState(): Promise<OnboardingState> {
 
 export function completeOnboarding(): Promise<OnboardingState> {
   return invoke<OnboardingState>("complete_onboarding");
+}
+
+export function listWorkspaces(): Promise<WorkspaceSummary[]> {
+  return invoke<WorkspaceSummary[]>("list_workspaces");
+}
+
+export function switchWorkspace(database: string): Promise<void> {
+  return invoke<void>("switch_workspace", { database });
+}
+
+export function exportWorkspace(path: string): Promise<string> {
+  return invoke<string>("export_workspace", { path });
+}
+
+export function importWorkspace(path: string): Promise<void> {
+  return invoke<void>("import_workspace", { path });
 }

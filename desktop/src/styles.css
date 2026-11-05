@@ -269,6 +269,10 @@ button {
   gap: 8px;
 }
 
+.workspace-actions {
+  margin-top: 16px;
+}
+
 .primary-button {
   padding: 8px 13px;
   border: 0;
