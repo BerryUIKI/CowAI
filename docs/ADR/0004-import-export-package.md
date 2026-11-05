@@ -3,6 +3,7 @@
 - **Status**: Accepted; v1 implemented in `cowbot-package` (workspace kind)
 - **Date**: 2026-11-03
 - **Related**: `docs/PRD.md` §7.1, `docs/ARCHITECTURE.md` §4.3
+- **Extended by**: ADR-0017 (desktop workspace transfer)
 
 ## Context
 
