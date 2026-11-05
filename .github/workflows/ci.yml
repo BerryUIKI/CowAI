@@ -71,18 +71,23 @@ jobs:
             pkg-config \
             libssl-dev
 
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          package_json_file: desktop/package.json
+
       - name: Install Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: desktop/pnpm-lock.yaml
 
       - name: Install frontend dependencies
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       - name: Build frontend
-        run: npm run build
+        run: pnpm run build
 
       - name: Check Tauri formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
