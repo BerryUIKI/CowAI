@@ -192,3 +192,7 @@ export function exportWorkspace(path: string): Promise<string> {
 export function importWorkspace(path: string): Promise<void> {
   return invoke<void>("import_workspace", { path });
 }
+
+export function createWorkspace(name: string): Promise<void> {
+  return invoke<void>("create_workspace", { name });
+}

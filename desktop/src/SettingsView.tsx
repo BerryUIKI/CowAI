@@ -3,6 +3,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 
 import ModelProviderSettings from "./ModelProviderSettings";
 import {
+  createWorkspace,
   exportWorkspace,
   importWorkspace,
   listWorkspaces,
@@ -68,6 +69,7 @@ export default function SettingsView({
   const [workspaceBusy, setWorkspaceBusy] = useState<string | null>(null);
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
+  const [newWorkspaceName, setNewWorkspaceName] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +124,22 @@ export default function SettingsView({
     } catch (error) {
       setWorkspaceError(errorMessage(error));
     } finally {
+      setWorkspaceBusy(null);
+    }
+  }
+
+  async function handleCreateWorkspace() {
+    const name = newWorkspaceName.trim();
+    if (!name) return;
+
+    setWorkspaceBusy("create");
+    setWorkspaceError(null);
+    setWorkspaceNotice(null);
+    try {
+      await createWorkspace(name);
+      // The backend registers the workspace and restarts the app.
+    } catch (error) {
+      setWorkspaceError(errorMessage(error));
       setWorkspaceBusy(null);
     }
   }
@@ -314,8 +332,9 @@ export default function SettingsView({
                 <div className="settings-section-head">
                   <h3 id="settings-local-workspaces">Local workspaces</h3>
                   <p className="settings-hint">
-                    Each workspace lives in its own local database. Switching
-                    restarts CowBot; finish running tasks first.
+                    Each workspace lives in its own local database. Creating,
+                    importing, and switching restart CowBot; finish running tasks
+                    first.
                   </p>
                 </div>
 
@@ -329,6 +348,27 @@ export default function SettingsView({
                     {workspaceNotice}
                   </p>
                 ) : null}
+
+                <div className="workspace-create">
+                  <label className="field">
+                    <span>New workspace</span>
+                    <input
+                      value={newWorkspaceName}
+                      onChange={(event) => setNewWorkspaceName(event.target.value)}
+                      placeholder="Team workspace"
+                      autoComplete="off"
+                      disabled={workspaceBusy !== null}
+                    />
+                  </label>
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={handleCreateWorkspace}
+                    disabled={workspaceBusy !== null || !newWorkspaceName.trim()}
+                  >
+                    {workspaceBusy === "create" ? "Creating…" : "Create workspace"}
+                  </button>
+                </div>
 
                 {workspaces.length === 0 ? (
                   <p className="settings-empty">No workspaces registered.</p>

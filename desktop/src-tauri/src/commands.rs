@@ -723,6 +723,57 @@ pub async fn import_workspace(
     app.restart();
 }
 
+/// Create a new empty workspace database and restart into it.
+#[tauri::command]
+pub async fn create_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    name: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Enter a workspace name.".to_string());
+    }
+    if name.chars().count() > 80 {
+        return Err("Workspace names are limited to 80 characters.".to_string());
+    }
+
+    let database = format!("{}/{}.db", config::WORKSPACES_DIR, WorkspaceId::random().0);
+    let database_path = config::resolve_database_path(&state.data_dir, &database)?;
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+
+    let client =
+        match cowbot_client::LocalClient::create_workspace_database(&database_path, name).await {
+            Ok(client) => client,
+            Err(error) => {
+                remove_database_files(&database_path);
+                return Err(error.to_string());
+            }
+        };
+    drop(client);
+
+    let mut config = load_config(&state)?;
+    config.workspaces.push(config::WorkspaceEntry {
+        database: database.clone(),
+        name: name.to_string(),
+    });
+    config.active_workspace_database = Some(database);
+    if let Err(error) = config::save(&state.config_path, &config) {
+        remove_database_files(&database_path);
+        return Err(format!(
+            "failed to write {}: {error}",
+            state.config_path.display()
+        ));
+    }
+
+    app.restart();
+}
+
 /// Send a minimal completion with the drafted provider settings.
 ///
 /// A blank API key falls back to the key stored for `provider_id`, so a saved
