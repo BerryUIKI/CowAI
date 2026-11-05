@@ -273,6 +273,17 @@ button {
   margin-top: 16px;
 }
 
+.workspace-create {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin: 14px 0;
+}
+
+.workspace-create .field {
+  flex: 1;
+}
+
 .primary-button {
   padding: 8px 13px;
   border: 0;

@@ -28,7 +28,7 @@ This roadmap sequences the work from the current foundation to a self-hosted, ch
 | **Phase 2** | Self-Hosted Team Mode | Multi-user server, shared workspaces, remote desktop client, Docker deployment |
 | **Phase 3** | Extensibility and Ecosystem | Docker sandbox, memory, integrations, plugins/MCP, marketplace, enterprise features |
 
-No calendar dates are committed; a phase ships when its exit criteria are met.
+No calendar dates are committed; a phase ships when its exit criteria are met. Phase 0 and Phase 1 are complete; Phase 2 has not started.
 
 ---
 
@@ -65,11 +65,13 @@ Delivered:
 
 > **Progress**: milestones 1.1–1.5 are implemented — `cowbot-store` provides embedded SQLite migrations and repositories, `cowbot-service` provides idempotent local bootstrap, channel/message persistence wired to the event bus, the assignment runtime with event-sourced lifecycle/restart reconciliation, a sequential crew runner, the static risk classifier with approval gates and audit records, and validated built-in templates with `.cowtemplate` import/export.
 >
-> **Remaining within 1.1–1.5**: `AssignmentService` enforces the request, execution, and wake budgets, but the sequential crew runner only exercises the execution budget and there is no wake/re-entry scheduler for delegated work; `cowbot-client` local mode exists and powers the CLI, while the desktop UI and remote mode remain. These are tracked as the remaining tasks of 1.6.
+> **Deferred beyond Phase 1** (ADR-0006): the background wake/re-entry scheduler for delegated assignments and cross-root concurrency. The sequential crew runner exercises the execution budget; `AssignmentService` enforces request, execution, and wake budgets when delegation is used. Remote mode is Phase 2.3.
 >
 > **1.6 progress**: the Tauri v2 shell and React frontend live in `desktop/`. The desktop now covers local session bootstrap, channel and message operations, live events, task creation/list/detail with assignment and run history, pending approval decisions, desktop-initiated crew execution of a submitted task, and a sectioned settings page in the sidebar footer for agents, templates, and model providers. Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012, ADR-0016).
 >
-> **1.7 progress**: `cowbot-package` implements the `.cowpkg` format from ADR-0004 — a verified ZIP container with a manifest, per-file SHA-256 checksums, and import that always creates a fresh workspace. `cowbot export` and `cowbot import` expose it from the CLI. The desktop now has first-run onboarding: a three-step guide covers the local workspace, model providers, and starter agents, can be skipped, and completes offline (ADR-0013). A release workflow builds unsigned Windows (NSIS/MSI), macOS (universal DMG), and Linux (deb/AppImage) installers on `v*` tags and manual runs, and creates draft GitHub Releases for review (ADR-0014). The desktop can export the active workspace as a `.cowpkg` package, import a package into a new workspace database, and switch between local workspaces (ADR-0017). User documentation remains.
+> **1.7 progress**: `cowbot-package` implements the `.cowpkg` format from ADR-0004 — a verified ZIP container with a manifest, per-file SHA-256 checksums, and import that always creates a fresh workspace. `cowbot export` and `cowbot import` expose it from the CLI. The desktop now has first-run onboarding: a three-step guide covers the local workspace, model providers, and starter agents, can be skipped, and completes offline (ADR-0013). A release workflow builds unsigned Windows (NSIS/MSI), macOS (universal DMG), and Linux (deb/AppImage) installers on `v*` tags and manual runs, and creates draft GitHub Releases for review (ADR-0014). The desktop can create a new workspace, export the active workspace as a `.cowpkg` package, import a package into a new workspace database, and switch between local workspaces (ADR-0017). The [user guide](USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, and troubleshooting.
+>
+> **Phase 1 status**: complete. The exit criteria below are met. Reproducible path: install a release → complete onboarding → add agents from a template → create a channel and a task in it → run the crew and decide an approval → inspect run and tool-call history → export the workspace, import it as a new local workspace, and switch between them. 0.1.x remains the current release line until Phase 2 work starts.
 
 ### 4.2 Phase 1 Exit Criteria
 

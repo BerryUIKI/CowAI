@@ -181,6 +181,7 @@ pub fn run() {
             commands::complete_onboarding,
             commands::list_workspaces,
             commands::switch_workspace,
+            commands::create_workspace,
             commands::export_workspace,
             commands::import_workspace,
         ])

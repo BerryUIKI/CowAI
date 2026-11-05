@@ -19,7 +19,7 @@ The current UI has four views: **Channels** (channels and live messages),
 on a submitted task), **Approvals** (approve or reject tool calls requested by
 running agents), and **Settings** (in the sidebar footer, with **Model**,
 **Team**, and **Workspace** sections for model providers, agents and templates,
-and workspace transfer).
+and workspace creation and transfer).
 
 Model providers are OpenAI Chat Completions, Anthropic Messages, or OpenAI
 Responses endpoints kept in `config.json` under the same app-data directory as
@@ -34,12 +34,14 @@ the desktop (the CLI keeps its flags and environment variables).
 ## Workspaces and packages
 
 Each workspace lives in its own local database. The default is
-`app_data_dir()/cowbot.db`; imported packages create
-`app_data_dir()/workspaces/<uuid>.db`. Settings → Workspace lists registered
-workspaces, switches between them, and exports the active workspace as a
-`.cowpkg` package. Import and switch restart the app, and both are refused while
-a crew is running. Import always creates a new workspace database and never
-merges data. See [ADR-0017](../docs/ADR/0017-desktop-workspace-transfer.md).
+`app_data_dir()/cowbot.db`; created and imported workspaces use
+`app_data_dir()/workspaces/<uuid>.db`. Settings → Workspace creates empty
+workspaces, lists registered ones, switches between them, and exports the active
+workspace as a `.cowpkg` package. Creating, importing, and switching restart the
+app, and all three are refused while a crew is running. Import always creates a
+new workspace database and never merges data. See
+[ADR-0017](../docs/ADR/0017-desktop-workspace-transfer.md) and the
+[user guide](../docs/USER_GUIDE.md).
 
 ## Prerequisites
 
