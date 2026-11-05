@@ -8,7 +8,7 @@ use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_llm::{ChatCompletionRequest, ChatMessage};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::time::Duration;
 use tauri::{Emitter, Manager, State};
 
@@ -338,6 +338,7 @@ pub async fn decide_approval(
 pub struct ProviderView {
     pub id: String,
     pub name: String,
+    pub protocol: config::ProviderProtocol,
     pub base_url: String,
     pub model: String,
     pub has_api_key: bool,
@@ -377,6 +378,7 @@ fn model_settings(state: &AppState, config: &config::AppConfig) -> ModelSettings
         .map(|provider| ProviderView {
             id: provider.id.clone(),
             name: provider.name.clone(),
+            protocol: provider.protocol,
             base_url: provider.base_url.clone(),
             model: provider.model.clone(),
             has_api_key: provider.api_key.is_some(),
@@ -401,44 +403,59 @@ pub fn get_model_settings(state: State<'_, AppState>) -> Result<ModelSettings, S
     Ok(model_settings(&state, &config))
 }
 
+/// Values submitted by the provider editor.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderDraft {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    pub protocol: config::ProviderProtocol,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub clear_api_key: bool,
+}
+
 /// Apply a create or update to an in-memory configuration.
 ///
 /// A blank API key keeps the stored one; `clear_api_key` removes it. The first
 /// provider added to an empty configuration becomes active.
-fn upsert_provider(
-    config: &mut config::AppConfig,
-    provider_id: Option<&str>,
-    name: &str,
-    base_url: &str,
-    model: &str,
-    api_key: Option<&str>,
-    clear_api_key: bool,
-) -> Result<(), String> {
-    let typed_key = config::normalize_api_key(api_key);
+fn upsert_provider(config: &mut config::AppConfig, draft: &ProviderDraft) -> Result<(), String> {
+    let typed_key = config::normalize_api_key(draft.api_key.as_deref());
 
-    match provider_id {
+    match draft.provider_id.as_deref() {
         Some(id) => {
             let index = config
                 .providers
                 .iter()
                 .position(|provider| provider.id == id)
                 .ok_or_else(|| format!("provider '{id}' was not found"))?;
-            let key = if clear_api_key {
+            let key = if draft.clear_api_key {
                 None
             } else {
                 typed_key.or_else(|| config.providers[index].api_key.clone())
             };
-            config.providers[index] =
-                config::make_provider(id.to_string(), name, base_url, model, key.as_deref())?;
+            config.providers[index] = config::make_provider(
+                id.to_string(),
+                &draft.name,
+                draft.protocol,
+                &draft.base_url,
+                &draft.model,
+                key.as_deref(),
+            )?;
         }
         None => {
             let id = config::new_provider_id(&config.providers);
-            let key = if clear_api_key { None } else { typed_key };
+            let key = if draft.clear_api_key { None } else { typed_key };
             config.providers.push(config::make_provider(
                 id.clone(),
-                name,
-                base_url,
-                model,
+                &draft.name,
+                draft.protocol,
+                &draft.base_url,
+                &draft.model,
                 key.as_deref(),
             )?);
             if config.active_provider().is_none() {
@@ -454,23 +471,10 @@ fn upsert_provider(
 #[tauri::command]
 pub fn save_model_provider(
     state: State<'_, AppState>,
-    provider_id: Option<String>,
-    name: String,
-    base_url: String,
-    model: String,
-    api_key: Option<String>,
-    clear_api_key: bool,
+    draft: ProviderDraft,
 ) -> Result<ModelSettings, String> {
     let mut config = load_config(&state)?;
-    upsert_provider(
-        &mut config,
-        provider_id.as_deref(),
-        &name,
-        &base_url,
-        &model,
-        api_key.as_deref(),
-        clear_api_key,
-    )?;
+    upsert_provider(&mut config, &draft)?;
 
     let config = persist_config(&state, config)?;
     Ok(model_settings(&state, &config))
@@ -553,6 +557,7 @@ pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState
 pub async fn test_model_provider(
     state: State<'_, AppState>,
     provider_id: Option<String>,
+    protocol: config::ProviderProtocol,
     base_url: String,
     model: String,
     api_key: Option<String>,
@@ -565,7 +570,7 @@ pub async fn test_model_provider(
     let api_key = config::normalize_api_key(api_key.as_deref()).or(stored_key);
     let (base_url, model) = config::validate_endpoint(&base_url, &model)?;
     let resolved = config::ResolvedModel {
-        kind: config::ProviderKind::OpenAiCompatible,
+        kind: config::ProviderKind::Remote(protocol),
         model,
         base_url: Some(base_url),
         api_key,
@@ -641,18 +646,50 @@ mod tests {
         assert!(parse_approval_level("sometimes").is_err());
     }
 
+    fn draft(name: &str, base_url: &str, model: &str, api_key: Option<&str>) -> ProviderDraft {
+        ProviderDraft {
+            provider_id: None,
+            protocol: config::ProviderProtocol::OpenAi,
+            name: name.to_string(),
+            base_url: base_url.to_string(),
+            model: model.to_string(),
+            api_key: api_key.map(str::to_string),
+            clear_api_key: false,
+        }
+    }
+
+    #[test]
+    fn provider_draft_accepts_camel_case_fields() {
+        let draft: ProviderDraft = serde_json::from_value(serde_json::json!({
+            "providerId": "p1",
+            "protocol": "anthropic",
+            "name": "Claude",
+            "baseUrl": "https://api.anthropic.com",
+            "model": "claude-sonnet-5-5",
+            "apiKey": "secret",
+            "clearApiKey": false
+        }))
+        .unwrap();
+
+        assert_eq!(draft.provider_id.as_deref(), Some("p1"));
+        assert_eq!(draft.protocol, config::ProviderProtocol::Anthropic);
+        assert_eq!(draft.base_url, "https://api.anthropic.com");
+        assert_eq!(draft.api_key.as_deref(), Some("secret"));
+        assert!(!draft.clear_api_key);
+    }
+
     #[test]
     fn first_provider_becomes_active() {
         let mut settings = config::AppConfig::default();
 
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
 
@@ -665,30 +702,47 @@ mod tests {
     }
 
     #[test]
+    fn saving_a_provider_keeps_its_protocol() {
+        let mut settings = config::AppConfig::default();
+        let mut claude = draft(
+            "Claude",
+            "https://api.anthropic.com",
+            "claude-sonnet-5-5",
+            None,
+        );
+        claude.protocol = config::ProviderProtocol::Anthropic;
+
+        upsert_provider(&mut settings, &claude).unwrap();
+
+        assert_eq!(
+            settings.providers[0].protocol,
+            config::ProviderProtocol::Anthropic
+        );
+    }
+
+    #[test]
     fn updating_with_a_blank_key_keeps_the_stored_key() {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
         let id = settings.providers[0].id.clone();
 
-        upsert_provider(
-            &mut settings,
-            Some(id.as_str()),
+        let mut update = draft(
             "Renamed",
             "https://api.example.com/v1",
             "example-model",
             None,
-            false,
-        )
-        .unwrap();
+        );
+        update.provider_id = Some(id);
+        upsert_provider(&mut settings, &update).unwrap();
 
         assert_eq!(settings.providers[0].name, "Renamed");
         assert_eq!(settings.providers[0].base_url, "https://api.example.com/v1");
@@ -700,26 +754,20 @@ mod tests {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
         let id = settings.providers[0].id.clone();
 
-        upsert_provider(
-            &mut settings,
-            Some(id.as_str()),
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            None,
-            true,
-        )
-        .unwrap();
+        let mut update = draft("OpenAI", "https://api.openai.com/v1", "gpt-4o", None);
+        update.provider_id = Some(id);
+        update.clear_api_key = true;
+        upsert_provider(&mut settings, &update).unwrap();
 
         assert!(settings.providers[0].api_key.is_none());
     }
@@ -729,24 +777,14 @@ mod tests {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "First",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            None,
-            false,
+            &draft("First", "https://api.openai.com/v1", "gpt-4o", None),
         )
         .unwrap();
         let first_id = settings.providers[0].id.clone();
 
         upsert_provider(
             &mut settings,
-            None,
-            "Second",
-            "https://api.example.org/v1",
-            "other-model",
-            None,
-            false,
+            &draft("Second", "https://api.example.org/v1", "other-model", None),
         )
         .unwrap();
 
@@ -761,16 +799,10 @@ mod tests {
     fn updating_an_unknown_provider_fails() {
         let mut settings = config::AppConfig::default();
 
-        assert!(upsert_provider(
-            &mut settings,
-            Some("missing"),
-            "Name",
-            "https://api.example.com/v1",
-            "model",
-            None,
-            false,
-        )
-        .is_err());
+        let mut update = draft("Name", "https://api.example.com/v1", "model", None);
+        update.provider_id = Some("missing".to_string());
+
+        assert!(upsert_provider(&mut settings, &update).is_err());
         assert!(settings.providers.is_empty());
     }
 }

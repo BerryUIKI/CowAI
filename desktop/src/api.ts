@@ -13,6 +13,7 @@ import type {
   CowEvent,
   ModelSettings,
   OnboardingState,
+  ProviderProtocol,
   Run,
   Task,
   TemplateDocument,
@@ -123,6 +124,7 @@ export function getModelSettings(): Promise<ModelSettings> {
 
 export function saveModelProvider(input: {
   providerId: string | null;
+  protocol: ProviderProtocol;
   name: string;
   baseUrl: string;
   model: string;
@@ -130,12 +132,15 @@ export function saveModelProvider(input: {
   clearApiKey: boolean;
 }): Promise<ModelSettings> {
   return invoke<ModelSettings>("save_model_provider", {
-    providerId: input.providerId,
-    name: input.name,
-    baseUrl: input.baseUrl,
-    model: input.model,
-    apiKey: input.apiKey.trim() ? input.apiKey : null,
-    clearApiKey: input.clearApiKey,
+    draft: {
+      providerId: input.providerId,
+      protocol: input.protocol,
+      name: input.name,
+      baseUrl: input.baseUrl,
+      model: input.model,
+      apiKey: input.apiKey.trim() ? input.apiKey : null,
+      clearApiKey: input.clearApiKey,
+    },
   });
 }
 
@@ -149,12 +154,14 @@ export function activateModelProvider(providerId: string | null): Promise<ModelS
 
 export function testModelProvider(input: {
   providerId: string | null;
+  protocol: ProviderProtocol;
   baseUrl: string;
   model: string;
   apiKey: string;
 }): Promise<string> {
   return invoke<string>("test_model_provider", {
     providerId: input.providerId,
+    protocol: input.protocol,
     baseUrl: input.baseUrl,
     model: input.model,
     apiKey: input.apiKey.trim() ? input.apiKey : null,

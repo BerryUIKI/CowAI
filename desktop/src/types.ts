@@ -177,9 +177,12 @@ export interface TemplateDocument {
   tasks: unknown[];
 }
 
+export type ProviderProtocol = "openai" | "anthropic" | "openai-responses";
+
 export interface ModelProvider {
   id: string;
   name: string;
+  protocol: ProviderProtocol;
   base_url: string;
   model: string;
   has_api_key: boolean;

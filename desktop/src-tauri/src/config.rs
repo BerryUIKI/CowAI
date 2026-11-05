@@ -11,7 +11,9 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use cowbot_llm::{LlmProvider, MockLlmProvider, OpenAiCompatibleProvider};
+use cowbot_llm::{
+    AnthropicProvider, LlmProvider, MockLlmProvider, OpenAiCompatibleProvider, ResponsesProvider,
+};
 use serde::{Deserialize, Serialize};
 
 /// File name of the desktop configuration inside the app data directory.
@@ -23,11 +25,30 @@ pub const CONFIG_VERSION: u32 = 1;
 /// Default model shown when no provider is active.
 pub const DEFAULT_MODEL: &str = "gpt-4o";
 
-/// One OpenAI-compatible provider saved by the user.
+/// Wire protocol a saved provider speaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum ProviderProtocol {
+    /// OpenAI Chat Completions (`/v1/chat/completions`).
+    #[default]
+    #[serde(rename = "openai")]
+    OpenAi,
+    /// Anthropic Messages (`/v1/messages`).
+    #[serde(rename = "anthropic")]
+    Anthropic,
+    /// OpenAI Responses (`/v1/responses`).
+    #[serde(rename = "openai-responses")]
+    OpenAiResponses,
+}
+
+/// One model provider saved by the user.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ProviderConfig {
     pub id: String,
     pub name: String,
+    /// Missing in files written before protocol selection existed; those
+    /// providers are OpenAI-compatible.
+    #[serde(default)]
+    pub protocol: ProviderProtocol,
     pub base_url: String,
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -87,7 +108,7 @@ impl AppConfig {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderKind {
     Mock,
-    OpenAiCompatible,
+    Remote(ProviderProtocol),
 }
 
 /// The model configuration currently in effect.
@@ -191,6 +212,7 @@ pub fn normalize_api_key(raw: Option<&str>) -> Option<String> {
 pub fn make_provider(
     id: String,
     name: &str,
+    protocol: ProviderProtocol,
     base_url: &str,
     model: &str,
     api_key: Option<&str>,
@@ -203,6 +225,7 @@ pub fn make_provider(
     Ok(ProviderConfig {
         id,
         name: name.to_string(),
+        protocol,
         base_url,
         model,
         api_key: normalize_api_key(api_key),
@@ -232,7 +255,7 @@ fn provider_id_for(millis: u128, existing: &[ProviderConfig]) -> String {
 pub fn resolve_active(config: &AppConfig) -> ResolvedModel {
     match config.active_provider() {
         Some(provider) => ResolvedModel {
-            kind: ProviderKind::OpenAiCompatible,
+            kind: ProviderKind::Remote(provider.protocol),
             model: provider.model.clone(),
             base_url: Some(provider.base_url.clone()),
             api_key: provider.api_key.clone(),
@@ -250,10 +273,20 @@ pub fn resolve_active(config: &AppConfig) -> ResolvedModel {
 pub fn build_provider(resolved: &ResolvedModel) -> Arc<dyn LlmProvider> {
     match resolved.kind {
         ProviderKind::Mock => Arc::new(MockLlmProvider::echo()),
-        ProviderKind::OpenAiCompatible => Arc::new(OpenAiCompatibleProvider::new(
+        ProviderKind::Remote(ProviderProtocol::OpenAi) => Arc::new(OpenAiCompatibleProvider::new(
             resolved.base_url.clone().unwrap_or_default(),
             resolved.api_key.clone(),
         )),
+        ProviderKind::Remote(ProviderProtocol::Anthropic) => Arc::new(AnthropicProvider::new(
+            resolved.base_url.clone().unwrap_or_default(),
+            resolved.api_key.clone(),
+        )),
+        ProviderKind::Remote(ProviderProtocol::OpenAiResponses) => {
+            Arc::new(ResponsesProvider::new(
+                resolved.base_url.clone().unwrap_or_default(),
+                resolved.api_key.clone(),
+            ))
+        }
     }
 }
 
@@ -265,6 +298,7 @@ mod tests {
         ProviderConfig {
             id: id.to_string(),
             name: name.to_string(),
+            protocol: ProviderProtocol::OpenAi,
             base_url: "https://api.example.com/v1".to_string(),
             model: "example-model".to_string(),
             api_key: Some("secret".to_string()),
@@ -339,6 +373,48 @@ mod tests {
     }
 
     #[test]
+    fn providers_without_a_protocol_default_to_openai() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"active_provider_id":"p1","providers":[{"id":"p1","name":"Legacy","base_url":"https://api.example.com/v1","model":"m"}]}"#,
+        )
+        .unwrap();
+
+        let config = load(&path).unwrap();
+
+        assert_eq!(config.providers[0].protocol, ProviderProtocol::OpenAi);
+    }
+
+    #[test]
+    fn protocols_serialize_to_stable_names() {
+        let config = AppConfig {
+            providers: vec![
+                ProviderConfig {
+                    protocol: ProviderProtocol::OpenAi,
+                    ..sample_provider("one", "One")
+                },
+                ProviderConfig {
+                    protocol: ProviderProtocol::Anthropic,
+                    ..sample_provider("two", "Two")
+                },
+                ProviderConfig {
+                    protocol: ProviderProtocol::OpenAiResponses,
+                    ..sample_provider("three", "Three")
+                },
+            ],
+            ..AppConfig::default()
+        };
+
+        let value = serde_json::to_value(&config).unwrap();
+
+        assert_eq!(value["providers"][0]["protocol"], "openai");
+        assert_eq!(value["providers"][1]["protocol"], "anthropic");
+        assert_eq!(value["providers"][2]["protocol"], "openai-responses");
+    }
+
+    #[test]
     fn resolve_uses_the_active_provider() {
         let config = AppConfig {
             providers: vec![sample_provider("one", "One"), sample_provider("two", "Two")],
@@ -348,13 +424,33 @@ mod tests {
 
         let resolved = resolve_active(&config);
 
-        assert_eq!(resolved.kind, ProviderKind::OpenAiCompatible);
+        assert_eq!(
+            resolved.kind,
+            ProviderKind::Remote(ProviderProtocol::OpenAi)
+        );
         assert_eq!(resolved.model, "example-model");
         assert_eq!(
             resolved.base_url.as_deref(),
             Some("https://api.example.com/v1")
         );
         assert_eq!(resolved.api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn resolve_carries_the_provider_protocol() {
+        let config = AppConfig {
+            providers: vec![ProviderConfig {
+                protocol: ProviderProtocol::Anthropic,
+                ..sample_provider("claude", "Claude")
+            }],
+            active_provider_id: Some("claude".to_string()),
+            ..AppConfig::default()
+        };
+
+        assert_eq!(
+            resolve_active(&config).kind,
+            ProviderKind::Remote(ProviderProtocol::Anthropic)
+        );
     }
 
     #[test]
@@ -396,10 +492,36 @@ mod tests {
 
     #[test]
     fn provider_requires_a_name_model_and_url() {
-        assert!(make_provider("id".into(), " ", "https://a.test/v1", "m", None).is_err());
-        assert!(make_provider("id".into(), "Name", "", "m", None).is_err());
-        assert!(make_provider("id".into(), "Name", "https://a.test/v1", " ", None).is_err());
-        assert!(make_provider("id".into(), "Name", "https://a.test/v1", "m", None).is_ok());
+        assert!(make_provider(
+            "id".into(),
+            " ",
+            ProviderProtocol::OpenAi,
+            "https://a.test/v1",
+            "m",
+            None
+        )
+        .is_err());
+        assert!(
+            make_provider("id".into(), "Name", ProviderProtocol::OpenAi, "", "m", None).is_err()
+        );
+        assert!(make_provider(
+            "id".into(),
+            "Name",
+            ProviderProtocol::OpenAi,
+            "https://a.test/v1",
+            " ",
+            None
+        )
+        .is_err());
+        assert!(make_provider(
+            "id".into(),
+            "Name",
+            ProviderProtocol::Anthropic,
+            "https://a.test/v1",
+            "m",
+            None
+        )
+        .is_ok());
     }
 
     #[test]
