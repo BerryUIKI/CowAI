@@ -1,39 +1,51 @@
 mod commands;
+mod config;
 mod migration;
 
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex, RwLock};
 
 use cowbot_client::{Client, LocalClient};
-use cowbot_llm::{LlmProvider, MockLlmProvider, OpenAiCompatibleProvider};
+use cowbot_llm::LlmProvider;
 use cowbot_tools::{
     CodeExecutionTool, ReadFileTool, SubprocessSandbox, ToolRegistry, WriteFileTool,
 };
 use tauri::{Emitter, Manager};
 
+/// Model configuration currently in effect.
+pub struct ModelRuntime {
+    pub llm: Arc<dyn LlmProvider>,
+    pub model: String,
+}
+
 /// Shared state for Tauri commands.
 pub struct AppState {
     pub client: Arc<LocalClient>,
-    pub llm: Arc<dyn LlmProvider>,
     pub tools: ToolRegistry,
-    pub model: String,
+    /// Active model provider; replaced when the user switches providers.
+    pub model: RwLock<ModelRuntime>,
+    /// Path of the local `config.json` holding model providers.
+    pub config_path: PathBuf,
     /// Task ids with a crew currently executing.
     pub running: Mutex<HashSet<String>>,
 }
 
 impl AppState {
-    /// Build the default LLM provider from the environment.
-    ///
-    /// Mirrors the CLI: a base URL or API key selects the OpenAI-compatible
-    /// provider; otherwise the mock provider keeps the app usable offline.
-    fn build_llm() -> Arc<dyn LlmProvider> {
-        let api_key = std::env::var("OPENAI_API_KEY").ok();
-        let base_url = std::env::var("OPENAI_BASE_URL").ok();
-        if api_key.is_none() && base_url.is_none() {
-            return Arc::new(MockLlmProvider::echo());
-        }
-        let url = base_url.unwrap_or_else(|| "https://api.openai.com/v1".to_string());
-        Arc::new(OpenAiCompatibleProvider::new(url, api_key))
+    /// Snapshot the provider handle and model name for one crew run.
+    pub fn runtime_model(&self) -> Result<(Arc<dyn LlmProvider>, String), String> {
+        let runtime = self.model.read().map_err(|error| error.to_string())?;
+        Ok((runtime.llm.clone(), runtime.model.clone()))
+    }
+
+    /// Rebuild the LLM client after the provider configuration changed.
+    pub fn apply_config(&self, config: &config::AppConfig) -> Result<(), String> {
+        let resolved = config::resolve_active(config);
+        let llm = config::build_provider(&resolved);
+        let mut runtime = self.model.write().map_err(|error| error.to_string())?;
+        runtime.model = resolved.model;
+        runtime.llm = llm;
+        Ok(())
     }
 
     fn build_tools(workspace_dir: &std::path::Path) -> ToolRegistry {
@@ -58,6 +70,20 @@ pub fn run() {
             std::fs::create_dir_all(&data_dir)?;
             migration::migrate_legacy_database(&data_dir);
             let db_path = data_dir.join("cowbot.db");
+
+            let config_path = config::config_path(&data_dir);
+            let config = match config::load(&config_path) {
+                Ok(config) => config,
+                Err(error) => {
+                    eprintln!(
+                        "warning: failed to read {}: {error}; using built-in defaults",
+                        config_path.display()
+                    );
+                    config::AppConfig::default()
+                }
+            };
+            let resolved = config::resolve_active(&config);
+
             let client = tauri::async_runtime::block_on(LocalClient::open(&db_path))?;
             // Local mode spawns the forwarding task, so subscribe must run
             // inside the runtime context.
@@ -71,9 +97,12 @@ pub fn run() {
 
             app.manage(AppState {
                 client: Arc::new(client),
-                llm: AppState::build_llm(),
                 tools: AppState::build_tools(&data_dir),
-                model: "gpt-4o".to_string(),
+                model: RwLock::new(ModelRuntime {
+                    llm: config::build_provider(&resolved),
+                    model: resolved.model,
+                }),
+                config_path,
                 running: Mutex::new(HashSet::new()),
             });
             Ok(())
@@ -97,6 +126,11 @@ pub fn run() {
             commands::list_tool_calls,
             commands::pending_approvals,
             commands::decide_approval,
+            commands::get_model_settings,
+            commands::save_model_provider,
+            commands::delete_model_provider,
+            commands::activate_model_provider,
+            commands::test_model_provider,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CowBot");

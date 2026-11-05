@@ -510,9 +510,11 @@ dependencies = [
  "cowbot-llm",
  "cowbot-tools",
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
