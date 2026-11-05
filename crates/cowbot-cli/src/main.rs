@@ -18,7 +18,7 @@ use tracing_subscriber::FmtSubscriber;
 #[derive(Parser)]
 #[command(name = "cowbot")]
 #[command(author = "CowBot Contributors")]
-#[command(version = "0.1.0")]
+#[command(version = "0.1.1")]
 #[command(about = "CowBot: High-performance Multi-Agent Collaboration Platform in Rust", long_about = None)]
 struct Cli {
     #[arg(short, long, global = true)]
