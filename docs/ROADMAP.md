@@ -69,7 +69,7 @@ Delivered:
 >
 > **1.6 progress**: the Tauri v2 shell and React frontend live in `desktop/`. The desktop now covers local session bootstrap, channel and message operations, live events, task creation/list/detail with assignment and run history, pending approval decisions, desktop-initiated crew execution of a submitted task, and a settings view for agents, templates, and model providers. Providers are OpenAI-compatible endpoints stored in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012). Desktop import/export and packaging remain.
 >
-> **1.7 progress**: `cowbot-package` implements the `.cowpkg` format from ADR-0004 — a verified ZIP container with a manifest, per-file SHA-256 checksums, and import that always creates a fresh workspace. `cowbot export` and `cowbot import` expose it from the CLI. Installer builds, first-run onboarding, and desktop import/export remain.
+> **1.7 progress**: `cowbot-package` implements the `.cowpkg` format from ADR-0004 — a verified ZIP container with a manifest, per-file SHA-256 checksums, and import that always creates a fresh workspace. `cowbot export` and `cowbot import` expose it from the CLI. The desktop now has first-run onboarding: a three-step guide covers the local workspace, model providers, and starter agents, can be skipped, and completes offline (ADR-0013). Installer builds, desktop import/export, and user documentation remain.
 
 ### 4.2 Phase 1 Exit Criteria
 
