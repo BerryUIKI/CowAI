@@ -22,11 +22,12 @@ Two constraints shaped the design:
 
 ### 1. One database per workspace
 
-The default workspace lives in `app_data_dir()/cowbot.db`. Importing a package
-creates a new database at `app_data_dir()/workspaces/<uuid>.db`, imports there
-(`cowbot_package::import_workspace`), and initializes a client on it. A failed
-import removes the new database file, and import never modifies an existing
-workspace.
+The default workspace lives in `app_data_dir()/cowbot.db`. Creating a workspace
+writes a new database at `app_data_dir()/workspaces/<uuid>.db` with an empty
+workspace of the chosen name. Importing a package uses the same location,
+imports there (`cowbot_package::import_workspace`), and initializes a client on
+it. A failed create or import removes the new database file, and import never
+modifies an existing workspace.
 
 ### 2. Registry and active selection
 
@@ -59,9 +60,9 @@ failed write does not leave a truncated package.
 ### 5. Dialogs and UI
 
 The desktop uses `tauri-plugin-dialog` for native open/save dialogs. Settings →
-Workspace lists registered workspaces with active and missing states, offers
-Switch for other available entries, and exposes Export and Import actions.
-Cancelling a dialog is a no-op.
+Workspace lists registered workspaces with active and missing states, creates
+empty workspaces, offers Switch for other available entries, and exposes Export
+and Import actions. Cancelling a dialog is a no-op.
 
 ## Alternatives considered
 

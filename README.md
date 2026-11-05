@@ -13,13 +13,14 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-blue.svg" alt="License: Apache-2.0"></a>
-  <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/status-Phase_1_in_progress-amber.svg" alt="Phase 1 in progress"></a>
+  <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/status-Phase_1_complete-22c55e.svg" alt="Phase 1 complete"></a>
   <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/contributions-welcome-22c55e.svg" alt="Contributions welcome"></a>
 </p>
 
 <p align="center">
   <a href="https://github.com/BerryUIKI/CowBot/releases">Download</a> ·
   <a href="#quick-start">Quick start</a> ·
+  <a href="docs/USER_GUIDE.md">User guide</a> ·
   <a href="#what-works-today">Features</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
   <a href="docs/ROADMAP.md">Roadmap</a> ·
@@ -30,7 +31,7 @@
 
 CowBot brings role-based agent teams, tasks, and channel-based collaboration into one modular platform. It draws on [CrewAI](https://github.com/crewAIInc/crewAI)'s role-and-task orchestration and [Mattermost](https://github.com/mattermost/mattermost)'s channel-based collaboration model.
 
-The Rust runtime and CLI work today. The local desktop experience is being built incrementally, with self-hosted team mode planned after the local MVP.
+The Rust runtime and CLI work today. Phase 1 (the local/offline MVP) is complete; self-hosted team mode is planned next.
 
 ## What works today
 
@@ -41,14 +42,14 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, and switchable model-provider plus agents/templates settings via Tauri |
+| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, switchable model providers, agents/templates, and workspace creation/export/import/switching via Tauri |
 | Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI and desktop |
 | Model providers | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including DeepSeek, Ollama, OpenRouter, and Claude Code-compatible relays; mock providers for offline testing |
 
-**In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, Approvals, and Settings views, switchable model providers, desktop-initiated crew execution, and first-run onboarding. Milestone 1.7 adds `.cowpkg` workspace export/import through the CLI, desktop export/import with local workspace switching, and unsigned desktop installers from the release workflow. User documentation, installer signing, and remote mode remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**Phase 1 complete:** milestones 1.1–1.7 are implemented. The local client and Tauri desktop shell cover Channels, Tasks, Approvals, and Settings, switchable model providers across three API protocols, desktop-initiated crew execution, first-run onboarding, workspace creation and switching, and `.cowpkg` export/import through both the CLI and desktop. The release workflow produces unsigned Windows, macOS, and Linux installers. The [user guide](docs/USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, and troubleshooting. Installer signing and remote mode (Phase 2) remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Naming and compatibility
 
