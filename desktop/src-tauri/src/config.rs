@@ -25,6 +25,20 @@ pub const CONFIG_VERSION: u32 = 1;
 /// Default model shown when no provider is active.
 pub const DEFAULT_MODEL: &str = "gpt-4o";
 
+/// Default workspace database, relative to the app data directory.
+pub const DEFAULT_DATABASE: &str = "cowbot.db";
+
+/// Directory holding imported workspace databases under the app data directory.
+pub const WORKSPACES_DIR: &str = "workspaces";
+
+/// One workspace database registered in the desktop switcher.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorkspaceEntry {
+    /// Path relative to the app data directory, for example `cowbot.db`.
+    pub database: String,
+    pub name: String,
+}
+
 /// Wire protocol a saved provider speaks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum ProviderProtocol {
@@ -70,6 +84,12 @@ pub struct AppConfig {
     /// so an upgrade does not show the guide to an existing user.
     #[serde(default = "onboarding_default_for_legacy")]
     pub onboarding_completed: bool,
+    /// Database file (relative to the app data directory) the desktop opens.
+    #[serde(default)]
+    pub active_workspace_database: Option<String>,
+    /// Workspaces offered by the desktop switcher.
+    #[serde(default)]
+    pub workspaces: Vec<WorkspaceEntry>,
 }
 
 fn current_version() -> u32 {
@@ -87,6 +107,8 @@ impl Default for AppConfig {
             active_provider_id: None,
             providers: Vec::new(),
             onboarding_completed: false,
+            active_workspace_database: None,
+            workspaces: Vec::new(),
         }
     }
 }
@@ -123,6 +145,29 @@ pub struct ResolvedModel {
 /// Path of the configuration file inside the app data directory.
 pub fn config_path(data_dir: &Path) -> PathBuf {
     data_dir.join(CONFIG_FILE)
+}
+
+/// Resolve a workspace database path relative to the app data directory.
+///
+/// Only plain relative paths are accepted; absolute paths, drive prefixes, and
+/// parent components are rejected so a configuration file cannot point outside
+/// the app data directory.
+pub fn resolve_database_path(data_dir: &Path, database: &str) -> Result<PathBuf, String> {
+    let relative = Path::new(database);
+    if database.trim().is_empty() || relative.is_absolute() {
+        return Err(
+            "workspace database path must be relative to the app data directory".to_string(),
+        );
+    }
+    if relative
+        .components()
+        .any(|component| !matches!(component, std::path::Component::Normal(_)))
+    {
+        return Err(
+            "workspace database path must not contain root or parent components".to_string(),
+        );
+    }
+    Ok(data_dir.join(relative))
 }
 
 /// Load the configuration, treating a missing file as the default.
@@ -350,6 +395,11 @@ mod tests {
             active_provider_id: Some("one".to_string()),
             providers: vec![sample_provider("one", "Example")],
             onboarding_completed: true,
+            active_workspace_database: Some("workspaces/one.db".to_string()),
+            workspaces: vec![WorkspaceEntry {
+                database: "workspaces/one.db".to_string(),
+                name: "Team".to_string(),
+            }],
         };
 
         save(&path, &config).unwrap();
@@ -370,6 +420,36 @@ mod tests {
 
         let config = load(&path).unwrap();
         assert!(config.providers.is_empty());
+    }
+
+    #[test]
+    fn legacy_files_have_no_workspace_registry() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(&path, r#"{"version":1,"providers":[]}"#).unwrap();
+
+        let config = load(&path).unwrap();
+
+        assert!(config.active_workspace_database.is_none());
+        assert!(config.workspaces.is_empty());
+    }
+
+    #[test]
+    fn workspace_database_paths_stay_inside_app_data() {
+        let root = Path::new("app-data");
+
+        assert_eq!(
+            resolve_database_path(root, DEFAULT_DATABASE).unwrap(),
+            root.join(DEFAULT_DATABASE)
+        );
+        assert_eq!(
+            resolve_database_path(root, "workspaces/one.db").unwrap(),
+            root.join("workspaces/one.db")
+        );
+        assert!(resolve_database_path(root, "").is_err());
+        assert!(resolve_database_path(root, "..").is_err());
+        assert!(resolve_database_path(root, "../escape.db").is_err());
+        assert!(resolve_database_path(root, "/absolute.db").is_err());
     }
 
     #[test]

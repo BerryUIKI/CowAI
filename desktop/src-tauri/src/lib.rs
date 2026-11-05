@@ -27,6 +27,8 @@ pub struct AppState {
     pub model: RwLock<ModelRuntime>,
     /// Path of the local `config.json` holding model providers.
     pub config_path: PathBuf,
+    /// Directory holding workspace databases, `config.json`, and `cowbot.db`.
+    pub data_dir: PathBuf,
     /// Task ids with a crew currently executing.
     pub running: Mutex<HashSet<String>>,
 }
@@ -65,14 +67,16 @@ impl AppState {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             migration::migrate_legacy_database(&data_dir);
-            let db_path = data_dir.join("cowbot.db");
 
             let config_path = config::config_path(&data_dir);
-            let config = match config::load(&config_path) {
+            let loaded = config::load(&config_path);
+            let config_writable = loaded.is_ok();
+            let mut config = match loaded {
                 Ok(config) => config,
                 Err(error) => {
                     eprintln!(
@@ -84,7 +88,48 @@ pub fn run() {
             };
             let resolved = config::resolve_active(&config);
 
+            let requested_database = config
+                .active_workspace_database
+                .clone()
+                .unwrap_or_else(|| config::DEFAULT_DATABASE.to_string());
+            let (active_database, db_path) =
+                match config::resolve_database_path(&data_dir, &requested_database) {
+                    Ok(path) if path.exists() || requested_database == config::DEFAULT_DATABASE => {
+                        (requested_database, path)
+                    }
+                    _ => (
+                        config::DEFAULT_DATABASE.to_string(),
+                        data_dir.join(config::DEFAULT_DATABASE),
+                    ),
+                };
+
             let client = tauri::async_runtime::block_on(LocalClient::open(&db_path))?;
+            let session = tauri::async_runtime::block_on(client.session())?;
+
+            // Keep the switcher registry in sync with the database in use and
+            // drop entries whose files no longer exist.
+            config.workspaces.retain(|entry| {
+                entry.database == active_database
+                    || config::resolve_database_path(&data_dir, &entry.database)
+                        .map(|path| path.exists())
+                        .unwrap_or(false)
+            });
+            match config
+                .workspaces
+                .iter_mut()
+                .find(|entry| entry.database == active_database)
+            {
+                Some(entry) => entry.name = session.workspace.name.clone(),
+                None => config.workspaces.push(config::WorkspaceEntry {
+                    database: active_database.clone(),
+                    name: session.workspace.name.clone(),
+                }),
+            }
+            config.active_workspace_database = Some(active_database);
+            if config_writable {
+                config::save(&config_path, &config)?;
+            }
+
             // Local mode spawns the forwarding task, so subscribe must run
             // inside the runtime context.
             let mut events = tauri::async_runtime::block_on(async { client.subscribe() });
@@ -103,6 +148,7 @@ pub fn run() {
                     model: resolved.model,
                 }),
                 config_path,
+                data_dir,
                 running: Mutex::new(HashSet::new()),
             });
             Ok(())
@@ -133,6 +179,10 @@ pub fn run() {
             commands::test_model_provider,
             commands::get_onboarding_state,
             commands::complete_onboarding,
+            commands::list_workspaces,
+            commands::switch_workspace,
+            commands::export_workspace,
+            commands::import_workspace,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CowBot");
