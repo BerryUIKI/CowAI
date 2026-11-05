@@ -18,6 +18,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/BerryUIKI/CowBot/releases">Download</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-works-today">Features</a> ·
   <a href="docs/ARCHITECTURE.md">Architecture</a> ·
@@ -40,19 +41,30 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, and agents/templates settings via Tauri |
+| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, and switchable model-provider plus agents/templates settings via Tauri |
+| Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI |
 | Model providers | OpenAI-compatible endpoints, including DeepSeek, Ollama, and OpenRouter; mock providers for offline testing |
 
-**In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, Approvals, and Settings views plus desktop-initiated crew execution. Milestone 1.7 adds `.cowpkg` workspace export/import. Installer packaging, first-run onboarding, desktop import/export, and remote mode remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, Approvals, and Settings views, switchable model providers, desktop-initiated crew execution, and first-run onboarding. Milestone 1.7 adds `.cowpkg` workspace export/import through the CLI plus unsigned desktop installers from the release workflow. Desktop import/export, user documentation, installer signing, and remote mode remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Naming and compatibility
 
 **CowBot** is the product and software name. The executable is `cowbot`, the desktop bundle and window use CowBot, local storage defaults to `cowbot.db`, and the database environment variable is `COWBOT_DB`.
 
 The CLI rename is a clean break: it no longer reads `COWAI_DB` or falls back to `cowai.db`. Rename an existing database (`mv cowai.db cowbot.db`) or pass `--db`. The desktop application copies a database from the previous `com.cowai.desktop` app-data directory on first launch, so existing desktop data is preserved automatically.
+
+## Install
+
+Desktop installers are built by the [release workflow](.github/workflows/release.yml) and published on the [Releases](https://github.com/BerryUIKI/CowBot/releases) page when a maintainer publishes a version:
+
+- **Windows:** NSIS `.exe` and `.msi`
+- **macOS:** universal `.dmg` for Apple Silicon and Intel
+- **Linux:** `.deb` and `.AppImage`
+
+Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. See [ADR-0014](docs/ADR/0014-desktop-release-builds.md) for the release policy. Until a release is published, build from source with the quick start below.
 
 ## Quick start
 

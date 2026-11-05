@@ -54,6 +54,8 @@ cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D w
 
 Use `npm run tauri dev` for the native shell. See [desktop prerequisites](../desktop/README.md); a browser-only Vite preview does not supply the native client backend.
 
+Desktop release bundles are built by [`.github/workflows/release.yml`](../.github/workflows/release.yml) on manual dispatch and on `v*` tags: NSIS/MSI on Windows, a universal DMG on macOS, and deb/AppImage on Linux. Manual runs upload workflow artifacts; tag runs create draft GitHub Releases that a maintainer publishes after review. Tags must match the version in `desktop/src-tauri/tauri.conf.json`. Builds are unsigned; see [ADR-0014](ADR/0014-desktop-release-builds.md).
+
 ## Runtime configuration
 
 `init` and `run` accept `--db`, falling back to `COWBOT_DB`, then `cowbot.db` in the current directory. Desktop uses `app_data_dir()/cowbot.db`; its state is separate by default. Protect database files and backups as potentially sensitive local data.
