@@ -46,7 +46,7 @@ The Rust runtime and CLI work today. The local desktop experience is being built
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI |
-| Model providers | OpenAI-compatible endpoints, including DeepSeek, Ollama, and OpenRouter; mock providers for offline testing |
+| Model providers | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including DeepSeek, Ollama, OpenRouter, and Claude Code-compatible relays; mock providers for offline testing |
 
 **In progress:** Phase 1 milestones 1.1–1.5 are implemented. Milestone 1.6 includes a local client and a Tauri desktop shell with Channels, Tasks, Approvals, and Settings views, switchable model providers, desktop-initiated crew execution, and first-run onboarding. Milestone 1.7 adds `.cowpkg` workspace export/import through the CLI plus unsigned desktop installers from the release workflow. Desktop import/export, user documentation, installer signing, and remote mode remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
@@ -169,7 +169,7 @@ Ten focused crates keep the domain model, runtime, and application services sepa
 | [`cowbot-core`](crates/cowbot-core) | Domain models, assignments, tools, and events |
 | [`cowbot-bus`](crates/cowbot-bus) | Tokio broadcast event bus and in-memory event history |
 | [`cowbot-tools`](crates/cowbot-tools) | Tool registry, subprocess sandbox, and file tools |
-| [`cowbot-llm`](crates/cowbot-llm) | OpenAI-compatible client and mock providers |
+| [`cowbot-llm`](crates/cowbot-llm) | OpenAI, Anthropic, and Responses clients plus mock providers |
 | [`cowbot-agent`](crates/cowbot-agent) | Agent execution loops, roles, and crew orchestration |
 | [`cowbot-store`](crates/cowbot-store) | SQLite migrations, persistence, and repositories |
 | [`cowbot-client`](crates/cowbot-client) | Transport-neutral client and local backend shared by CLI and desktop |

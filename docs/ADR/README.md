@@ -19,6 +19,7 @@ These records accompany the [architecture](../ARCHITECTURE.md). A decision descr
 | [0013](0013-first-run-onboarding.md) | First-run onboarding |
 | [0014](0014-desktop-release-builds.md) | Desktop release builds |
 | [0015](0015-pnpm-for-desktop-dependencies.md) | pnpm for desktop dependencies |
+| [0016](0016-model-provider-protocols.md) | Model provider protocols |
 
 For a new decision, copy [the template](TEMPLATE.md), assign the next unused four-digit number, and use a descriptive English filename. Discuss it in a linked issue/PR. Record context, alternatives, consequences, and status; do not silently rewrite an accepted decision when direction changes. Add a superseding record and link both records instead.
 

@@ -1,0 +1,382 @@
+//! Client for the OpenAI Responses API (`POST /v1/responses`).
+//!
+//! The Responses API is the shape used by Codex-style clients: tool calls are
+//! top-level `function_call` items and tool results are `function_call_output`
+//! items rather than chat messages.
+
+use crate::endpoint::endpoint_url;
+use crate::provider::LlmProvider;
+use crate::types::{
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatRole, LlmToolCall,
+};
+use async_trait::async_trait;
+use cowbot_core::error::{CowError, CowResult};
+use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use serde_json::{json, Value};
+use tracing::{debug, error};
+
+/// Client for any OpenAI Responses-compatible API endpoint.
+#[derive(Clone)]
+pub struct ResponsesProvider {
+    client: reqwest::Client,
+    base_url: String,
+    api_key: Option<String>,
+}
+
+impl ResponsesProvider {
+    pub fn new(base_url: impl Into<String>, api_key: Option<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            base_url: base_url.into(),
+            api_key,
+        }
+    }
+
+    fn responses_url(&self) -> String {
+        endpoint_url(&self.base_url, "/responses")
+    }
+}
+
+fn auth_headers(api_key: Option<&str>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+
+    if let Some(key) = api_key {
+        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
+            headers.insert(AUTHORIZATION, value);
+        }
+    }
+
+    headers
+}
+
+/// Convert the internal chat history into Responses `input` items.
+fn convert_input(messages: &[ChatMessage]) -> Vec<Value> {
+    let mut items = Vec::new();
+
+    for message in messages {
+        match message.role {
+            ChatRole::System => items.push(json!({
+                "role": "system",
+                "content": &message.content,
+            })),
+            ChatRole::User => items.push(json!({
+                "role": "user",
+                "content": &message.content,
+            })),
+            ChatRole::Assistant => {
+                if !message.content.is_empty() {
+                    items.push(json!({
+                        "role": "assistant",
+                        "content": &message.content,
+                    }));
+                }
+                if let Some(tool_calls) = &message.tool_calls {
+                    for call in tool_calls {
+                        let arguments = serde_json::to_string(&call.arguments)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        items.push(json!({
+                            "type": "function_call",
+                            "call_id": &call.id,
+                            "name": &call.name,
+                            "arguments": arguments,
+                        }));
+                    }
+                }
+            }
+            ChatRole::Tool => items.push(json!({
+                "type": "function_call_output",
+                "call_id": message.tool_call_id.clone().unwrap_or_default(),
+                "output": &message.content,
+            })),
+        }
+    }
+
+    items
+}
+
+fn request_body(request: &ChatCompletionRequest) -> Value {
+    let mut body = json!({
+        "model": &request.model,
+        "input": convert_input(&request.messages),
+    });
+
+    if let Some(temperature) = request.temperature {
+        body["temperature"] = json!(temperature);
+    }
+
+    if !request.tools.is_empty() {
+        let tools: Vec<Value> = request
+            .tools
+            .iter()
+            .map(|tool| {
+                json!({
+                    "type": "function",
+                    "name": &tool.name,
+                    "description": &tool.description,
+                    "parameters": &tool.parameters,
+                })
+            })
+            .collect();
+        body["tools"] = Value::Array(tools);
+    }
+
+    body
+}
+
+fn parse_response(value: Value) -> CowResult<ChatCompletionResponse> {
+    let output = value
+        .get("output")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CowError::Llm("Response did not contain an output array".to_string()))?;
+
+    let mut text_parts = Vec::new();
+    let mut tool_calls = Vec::new();
+
+    for item in output {
+        match item.get("type").and_then(Value::as_str) {
+            Some("message") => {
+                if let Some(content) = item.get("content").and_then(Value::as_array) {
+                    for part in content {
+                        if part.get("type").and_then(Value::as_str) == Some("output_text") {
+                            if let Some(text) = part.get("text").and_then(Value::as_str) {
+                                text_parts.push(text.to_string());
+                            }
+                        }
+                    }
+                }
+            }
+            Some("function_call") => {
+                let id = item
+                    .get("call_id")
+                    .or_else(|| item.get("id"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let name = item
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let arguments = item
+                    .get("arguments")
+                    .and_then(Value::as_str)
+                    .and_then(|raw| serde_json::from_str(raw).ok())
+                    .unwrap_or_else(|| json!({}));
+                tool_calls.push(LlmToolCall {
+                    id,
+                    name,
+                    arguments,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    // Some compatible servers expose only the convenience field.
+    if text_parts.is_empty() {
+        if let Some(text) = value.get("output_text").and_then(Value::as_str) {
+            text_parts.push(text.to_string());
+        }
+    }
+
+    let content = if text_parts.is_empty() {
+        None
+    } else {
+        Some(text_parts.join("\n"))
+    };
+    let finish_reason = value
+        .get("status")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    Ok(ChatCompletionResponse {
+        content,
+        tool_calls,
+        finish_reason,
+    })
+}
+
+#[async_trait]
+impl LlmProvider for ResponsesProvider {
+    fn name(&self) -> &str {
+        "openai-responses"
+    }
+
+    async fn chat_complete(
+        &self,
+        request: &ChatCompletionRequest,
+    ) -> CowResult<ChatCompletionResponse> {
+        let url = self.responses_url();
+        debug!(url = %url, model = %request.model, "Dispatching OpenAI responses request");
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(auth_headers(self.api_key.as_deref()))
+            .json(&request_body(request))
+            .send()
+            .await
+            .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let err_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            error!(status = %status, body = %err_text, "LLM provider returned non-200 status");
+            return Err(CowError::Llm(format!(
+                "API returned error status {}: {}",
+                status, err_text
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| CowError::Llm(format!("Failed to parse response JSON: {}", e)))?;
+
+        parse_response(payload)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cowbot_core::tool::ToolDefinition;
+    use serde_json::json;
+
+    fn tool_call(id: &str, name: &str, arguments: Value) -> LlmToolCall {
+        LlmToolCall {
+            id: id.to_string(),
+            name: name.to_string(),
+            arguments,
+        }
+    }
+
+    #[test]
+    fn messages_and_function_calls_become_input_items() {
+        let mut assistant = ChatMessage::assistant("Calling a tool.");
+        assistant.tool_calls = Some(vec![tool_call(
+            "call_1",
+            "read_file",
+            json!({"path": "a.txt"}),
+        )]);
+        let messages = vec![
+            ChatMessage::system("You are CowBot."),
+            ChatMessage::user("Read a.txt"),
+            assistant,
+            ChatMessage::tool("file contents", "call_1"),
+        ];
+
+        let items = convert_input(&messages);
+
+        assert_eq!(
+            items,
+            vec![
+                json!({"role": "system", "content": "You are CowBot."}),
+                json!({"role": "user", "content": "Read a.txt"}),
+                json!({"role": "assistant", "content": "Calling a tool."}),
+                json!({
+                    "type": "function_call",
+                    "call_id": "call_1",
+                    "name": "read_file",
+                    "arguments": "{\"path\":\"a.txt\"}"
+                }),
+                json!({
+                    "type": "function_call_output",
+                    "call_id": "call_1",
+                    "output": "file contents"
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn tools_use_the_responses_function_shape() {
+        let request = ChatCompletionRequest {
+            model: "gpt-4o".to_string(),
+            messages: vec![ChatMessage::user("hi")],
+            tools: vec![ToolDefinition {
+                name: "read_file".to_string(),
+                description: "Read a file".to_string(),
+                parameters: json!({"type": "object"}),
+            }],
+            temperature: Some(0.5),
+        };
+
+        let body = request_body(&request);
+
+        assert_eq!(body["model"], "gpt-4o");
+        assert_eq!(body["temperature"], 0.5);
+        assert_eq!(
+            body["tools"],
+            json!([{
+                "type": "function",
+                "name": "read_file",
+                "description": "Read a file",
+                "parameters": {"type": "object"}
+            }])
+        );
+    }
+
+    #[test]
+    fn parses_output_text_and_function_calls() {
+        let payload = json!({
+            "status": "completed",
+            "output": [
+                {
+                    "type": "message",
+                    "role": "assistant",
+                    "content": [{"type": "output_text", "text": "Done."}]
+                },
+                {
+                    "type": "function_call",
+                    "id": "fc_1",
+                    "call_id": "call_7",
+                    "name": "run",
+                    "arguments": "{\"cmd\":\"ls\"}"
+                }
+            ]
+        });
+
+        let response = parse_response(payload).unwrap();
+
+        assert_eq!(response.content.as_deref(), Some("Done."));
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].id, "call_7");
+        assert_eq!(response.tool_calls[0].name, "run");
+        assert_eq!(response.tool_calls[0].arguments, json!({"cmd": "ls"}));
+        assert_eq!(response.finish_reason.as_deref(), Some("completed"));
+    }
+
+    #[test]
+    fn falls_back_to_the_convenience_output_text_field() {
+        let payload = json!({"status": "completed", "output": [], "output_text": "Hello"});
+
+        let response = parse_response(payload).unwrap();
+
+        assert_eq!(response.content.as_deref(), Some("Hello"));
+    }
+
+    #[test]
+    fn missing_output_is_an_error() {
+        assert!(parse_response(json!({"status": "completed"})).is_err());
+    }
+
+    #[test]
+    fn endpoint_accepts_base_and_full_urls() {
+        let provider = ResponsesProvider::new("http://127.0.0.1:8788", None);
+        assert_eq!(
+            provider.responses_url(),
+            "http://127.0.0.1:8788/v1/responses"
+        );
+
+        let provider = ResponsesProvider::new("https://api.openai.com/v1/responses", None);
+        assert_eq!(
+            provider.responses_url(),
+            "https://api.openai.com/v1/responses"
+        );
+    }
+}

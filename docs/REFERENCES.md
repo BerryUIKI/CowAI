@@ -129,7 +129,7 @@ OpenMausBot treats bots as contacts, groups them into departments, gives each ch
 ### 3.8 What not to copy
 
 - **Electron** — CowBot uses Tauri.
-- **Wrapping provider CLIs as the core engine** — CowBot keeps the `LlmProvider` abstraction, so any OpenAI-compatible model or local model works.
+- **Wrapping provider CLIs as the core engine** — CowBot keeps the `LlmProvider` abstraction, so any supported model protocol (OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses) or local model works.
 - **Cloud VMs, phone clients, voice calls, biometric flows** — outside CowBot's local-first scope.
 - **The full provider permission-mode matrix** — CowBot has one policy model (ADR-0003); provider quirks should not leak into the domain.
 - **Unbounded runtime complexity** — adopt the assignment record and invariants, not every edge-case rule from a mature multi-provider product.
@@ -146,7 +146,7 @@ CC Switch is a desktop manager that keeps several API provider configurations fo
 - Switching applies immediately to the running app.
 - Provider management is separate from agent/tool settings and from workspace data.
 
-**CowBot implementation (Phase 1.6)**: the desktop settings view stores OpenAI-compatible providers in `app_data_dir()/config.json`, marks one as active, and rebuilds the runtime LLM client without a restart (ADR-0012). Keys stay on the local machine and never enter `.cowpkg` exports. Provider presets for common endpoints exist in the form; per-agent model selection and import/export of provider lists are follow-up work.
+**CowBot implementation (Phase 1.6)**: the desktop settings page stores providers with an explicit protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — in `app_data_dir()/config.json`, marks one as active, and rebuilds the runtime LLM client without a restart (ADR-0012, ADR-0016). Keys stay on the local machine and never enter `.cowpkg` exports. Provider presets for common endpoints exist in the editor; per-agent model selection and import/export of provider lists are follow-up work.
 
 ---
 

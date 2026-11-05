@@ -24,7 +24,7 @@ The mock provider needs no model service or API credentials. It produces mock de
 - `cowbot-package`: `.cowpkg` workspace packages — manifest, checksums, export, and verified import.
 - `cowbot-agent`: sequential crews, runtime loop, and an optional tool gate.
 - `cowbot-tools`: tool registry, subprocess/file tools, and static risk classification.
-- `cowbot-llm`: OpenAI-compatible transport and mock provider.
+- `cowbot-llm`: OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses transports plus a mock provider.
 - `cowbot-cli`: `init`, `run`, `tools`, `export`, and `import`; `run` executes through `LocalClient::run_crew`, and `export`/`import` read the `.cowpkg` format directly.
 - `desktop`: React/TypeScript frontend and standalone Tauri backend, outside the root Cargo workspace. The frontend calls Tauri commands wrapping the client boundary, never SQLite directly.
 
@@ -62,7 +62,7 @@ Desktop release bundles are built by [`.github/workflows/release.yml`](../.githu
 
 `run` accepts `--model` (default `gpt-4o`), `--base-url` / `OPENAI_BASE_URL`, `--api-key` / `OPENAI_API_KEY`, `--dry-run`, and `--approval` (default `ask`). With neither key nor URL it uses the mock; `--dry-run` forces the mock. A key alone selects the OpenAI endpoint. The HTTP client appends `/chat/completions`. CLI config files and automatic `.env` loading are not implemented. Streaming, retries, and rate limiting remain gaps.
 
-The desktop keeps its model providers in `app_data_dir()/config.json` (ADR-0012): a list of OpenAI-compatible endpoints, the active provider, and API keys stored in plain text. The Settings view adds, edits, tests, and switches providers; changes take effect without a restart, and no provider selected means the offline mock model. The same file records whether first-run onboarding was completed; files written before that field existed are treated as completed (ADR-0013). Environment variables do not configure the desktop; the CLI does not read this file. Protect `config.json` as sensitive local data and keep it out of packages and backups shared with others.
+The desktop keeps its model providers in `app_data_dir()/config.json` (ADR-0012, extended by ADR-0016): each entry records a protocol (`openai`, `anthropic`, or `openai-responses`), base URL, model, and API key, plus the active provider. API keys are stored in plain text. The Settings view (sidebar footer, with Model/Team/Workspace sections) adds, edits, tests, and switches providers; changes take effect without a restart, and no provider selected means the offline mock model. Files written before the protocol field existed load as OpenAI providers. The same file records whether first-run onboarding was completed; files written before that field existed are treated as completed (ADR-0013). Environment variables do not configure the desktop; the CLI does not read this file. Protect `config.json` as sensitive local data and keep it out of packages and backups shared with others.
 
 Approval policies are `ask`, `safe-auto`, `plan-only`, and `trusted`. Headless callers should select an appropriate policy; `ask` prompts on stdin and EOF rejects. Review [ADR 0003](ADR/0003-risk-classification-and-approval.md) and [ADR 0008](ADR/0008-cli-and-local-execution.md). Approval is not OS isolation; see [Security](../SECURITY.md).
 

@@ -17,14 +17,18 @@ as completed so upgrades do not show the guide again.
 The current UI has four views: **Channels** (channels and live messages),
 **Tasks** (create tasks, inspect assignment/run history, cancel, and run a crew
 on a submitted task), **Approvals** (approve or reject tool calls requested by
-running agents), and **Settings** (model providers, agents, and templates).
+running agents), and **Settings** (in the sidebar footer, with **Model**,
+**Team**, and **Workspace** sections for model providers, agents, and templates).
 
-Model providers are OpenAI-compatible endpoints kept in `config.json` under the
-same app-data directory as `cowbot.db`. The Settings view can add, edit, test,
-and switch providers; the active one is used by the next crew run, and no
-active provider means the offline mock model. API keys are stored in plain text
-in that file and are never sent back to the frontend. Environment variables do
-not configure the desktop (the CLI keeps its flags and environment variables).
+Model providers are OpenAI Chat Completions, Anthropic Messages, or OpenAI
+Responses endpoints kept in `config.json` under the same app-data directory as
+`cowbot.db`. Each provider records its protocol; the editor offers protocol
+presets and a custom base URL, and the Settings view can add, edit, test, and
+switch providers. The active one is used by the next crew run, and no active
+provider means the offline mock model. Files written before protocol selection
+existed load as OpenAI providers. API keys are stored in plain text in that file
+and are never sent back to the frontend. Environment variables do not configure
+the desktop (the CLI keeps its flags and environment variables).
 
 ## Prerequisites
 
