@@ -15,6 +15,7 @@ These records accompany the [architecture](../ARCHITECTURE.md). A decision descr
 | [0009](0009-desktop-ipc-and-state.md) | Desktop IPC and state |
 | [0010](0010-cowbot-product-name.md) | CowBot product name |
 | [0011](0011-cowbot-software-rename.md) | CowBot software rename |
+| [0012](0012-local-model-configuration.md) | Desktop model provider configuration |
 
 For a new decision, copy [the template](TEMPLATE.md), assign the next unused four-digit number, and use a descriptive English filename. Discuss it in a linked issue/PR. Record context, alternatives, consequences, and status; do not silently rewrite an accepted decision when direction changes. Add a superseding record and link both records instead.
 

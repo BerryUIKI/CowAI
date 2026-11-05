@@ -7,10 +7,12 @@ use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
 use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
+use cowbot_llm::{ChatCompletionRequest, ChatMessage};
 use serde::Serialize;
+use std::time::Duration;
 use tauri::{Emitter, Manager, State};
 
-use crate::AppState;
+use crate::{config, AppState};
 
 /// Payload emitted on `cowbot-run-finished` when a crew run settles.
 #[derive(Debug, Clone, Serialize)]
@@ -155,9 +157,8 @@ pub async fn run_task(
     }
 
     let client = state.client.clone();
-    let llm = state.llm.clone();
+    let (llm, model) = state.runtime_model()?;
     let tools = state.tools.clone();
-    let model = state.model.clone();
     let run_id = task_id.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -332,6 +333,254 @@ pub async fn decide_approval(
         .map_err(|error| error.to_string())
 }
 
+/// One provider as exposed to the frontend, without its API key.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderView {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    pub has_api_key: bool,
+    pub active: bool,
+}
+
+/// Model provider state rendered by the settings view.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelSettings {
+    pub providers: Vec<ProviderView>,
+    pub active_provider_id: Option<String>,
+    pub active_label: String,
+    pub config_path: String,
+}
+
+fn load_config(state: &AppState) -> Result<config::AppConfig, String> {
+    config::load(&state.config_path)
+        .map_err(|error| format!("failed to read {}: {error}", state.config_path.display()))
+}
+
+fn persist_config(
+    state: &AppState,
+    mut config: config::AppConfig,
+) -> Result<config::AppConfig, String> {
+    config.version = config::CONFIG_VERSION;
+    config::save(&state.config_path, &config)
+        .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))?;
+    state.apply_config(&config)?;
+    Ok(config)
+}
+
+fn model_settings(state: &AppState, config: &config::AppConfig) -> ModelSettings {
+    let active_id = config.active_provider().map(|provider| provider.id.clone());
+    let providers = config
+        .providers
+        .iter()
+        .map(|provider| ProviderView {
+            id: provider.id.clone(),
+            name: provider.name.clone(),
+            base_url: provider.base_url.clone(),
+            model: provider.model.clone(),
+            has_api_key: provider.api_key.is_some(),
+            active: active_id.as_deref() == Some(provider.id.as_str()),
+        })
+        .collect();
+    let active_label = config
+        .active_provider()
+        .map(|provider| provider.name.clone())
+        .unwrap_or_else(|| "Offline mock model".to_string());
+    ModelSettings {
+        providers,
+        active_provider_id: active_id,
+        active_label,
+        config_path: state.config_path.display().to_string(),
+    }
+}
+
+#[tauri::command]
+pub fn get_model_settings(state: State<'_, AppState>) -> Result<ModelSettings, String> {
+    let config = load_config(&state)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// Apply a create or update to an in-memory configuration.
+///
+/// A blank API key keeps the stored one; `clear_api_key` removes it. The first
+/// provider added to an empty configuration becomes active.
+fn upsert_provider(
+    config: &mut config::AppConfig,
+    provider_id: Option<&str>,
+    name: &str,
+    base_url: &str,
+    model: &str,
+    api_key: Option<&str>,
+    clear_api_key: bool,
+) -> Result<(), String> {
+    let typed_key = config::normalize_api_key(api_key);
+
+    match provider_id {
+        Some(id) => {
+            let index = config
+                .providers
+                .iter()
+                .position(|provider| provider.id == id)
+                .ok_or_else(|| format!("provider '{id}' was not found"))?;
+            let key = if clear_api_key {
+                None
+            } else {
+                typed_key.or_else(|| config.providers[index].api_key.clone())
+            };
+            config.providers[index] =
+                config::make_provider(id.to_string(), name, base_url, model, key.as_deref())?;
+        }
+        None => {
+            let id = config::new_provider_id(&config.providers);
+            let key = if clear_api_key { None } else { typed_key };
+            config.providers.push(config::make_provider(
+                id.clone(),
+                name,
+                base_url,
+                model,
+                key.as_deref(),
+            )?);
+            if config.active_provider().is_none() {
+                config.active_provider_id = Some(id);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a provider when `provider_id` is absent, otherwise update it.
+#[tauri::command]
+pub fn save_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+    name: String,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+    clear_api_key: bool,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    upsert_provider(
+        &mut config,
+        provider_id.as_deref(),
+        &name,
+        &base_url,
+        &model,
+        api_key.as_deref(),
+        clear_api_key,
+    )?;
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+#[tauri::command]
+pub fn delete_model_provider(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    let before = config.providers.len();
+    config
+        .providers
+        .retain(|provider| provider.id != provider_id);
+    if config.providers.len() == before {
+        return Err(format!("provider '{provider_id}' was not found"));
+    }
+    if config.active_provider_id.as_deref() == Some(provider_id.as_str()) {
+        config.active_provider_id = None;
+    }
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// Select the provider used for crew runs; `None` selects the offline mock.
+#[tauri::command]
+pub fn activate_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    match provider_id.as_deref() {
+        Some(id) => {
+            if config.providers.iter().all(|provider| provider.id != id) {
+                return Err(format!("provider '{id}' was not found"));
+            }
+            config.active_provider_id = Some(id.to_string());
+        }
+        None => config.active_provider_id = None,
+    }
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// Send a minimal completion with the drafted provider settings.
+///
+/// A blank API key falls back to the key stored for `provider_id`, so a saved
+/// provider can be tested without retyping its secret.
+#[tauri::command]
+pub async fn test_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+) -> Result<String, String> {
+    let config = load_config(&state)?;
+    let stored_key = provider_id
+        .as_deref()
+        .and_then(|id| config.provider(id))
+        .and_then(|provider| provider.api_key.clone());
+    let api_key = config::normalize_api_key(api_key.as_deref()).or(stored_key);
+    let (base_url, model) = config::validate_endpoint(&base_url, &model)?;
+    let resolved = config::ResolvedModel {
+        kind: config::ProviderKind::OpenAiCompatible,
+        model,
+        base_url: Some(base_url),
+        api_key,
+    };
+    let provider = config::build_provider(&resolved);
+    let request = ChatCompletionRequest {
+        model: resolved.model.clone(),
+        messages: vec![ChatMessage::user("Reply with the single word OK.")],
+        tools: Vec::new(),
+        temperature: Some(0.0),
+    };
+
+    let response = tokio::time::timeout(Duration::from_secs(30), provider.chat_complete(&request))
+        .await
+        .map_err(|_| "The provider did not respond within 30 seconds.".to_string())?
+        .map_err(|error| error.to_string())?;
+
+    let reply = response.content.unwrap_or_default();
+    let reply = reply.trim();
+    if reply.is_empty() {
+        Ok(format!(
+            "Connected to '{}'. The provider returned an empty reply.",
+            resolved.model
+        ))
+    } else {
+        Ok(format!(
+            "Connected to '{}': {}",
+            resolved.model,
+            summarize_reply(reply)
+        ))
+    }
+}
+
+fn summarize_reply(reply: &str) -> String {
+    const LIMIT: usize = 120;
+    let mut summary: String = reply.chars().take(LIMIT).collect();
+    if reply.chars().count() > LIMIT {
+        summary.push('…');
+    }
+    summary
+}
+
 fn parse_approval_level(value: &str) -> Result<ApprovalLevel, String> {
     match value {
         "ask" => Ok(ApprovalLevel::Ask),
@@ -363,5 +612,138 @@ mod tests {
     #[test]
     fn unknown_approval_level_is_rejected() {
         assert!(parse_approval_level("sometimes").is_err());
+    }
+
+    #[test]
+    fn first_provider_becomes_active() {
+        let mut settings = config::AppConfig::default();
+
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers.len(), 1);
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some(settings.providers[0].id.as_str())
+        );
+        assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn updating_with_a_blank_key_keeps_the_stored_key() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+        let id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            Some(id.as_str()),
+            "Renamed",
+            "https://api.example.com/v1",
+            "example-model",
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers[0].name, "Renamed");
+        assert_eq!(settings.providers[0].base_url, "https://api.example.com/v1");
+        assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn clearing_the_key_removes_it() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+        let id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            Some(id.as_str()),
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            None,
+            true,
+        )
+        .unwrap();
+
+        assert!(settings.providers[0].api_key.is_none());
+    }
+
+    #[test]
+    fn adding_a_second_provider_keeps_the_active_one() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "First",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            None,
+            false,
+        )
+        .unwrap();
+        let first_id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            None,
+            "Second",
+            "https://api.example.org/v1",
+            "other-model",
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers.len(), 2);
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some(first_id.as_str())
+        );
+    }
+
+    #[test]
+    fn updating_an_unknown_provider_fails() {
+        let mut settings = config::AppConfig::default();
+
+        assert!(upsert_provider(
+            &mut settings,
+            Some("missing"),
+            "Name",
+            "https://api.example.com/v1",
+            "model",
+            None,
+            false,
+        )
+        .is_err());
+        assert!(settings.providers.is_empty());
     }
 }

@@ -177,6 +177,22 @@ export interface TemplateDocument {
   tasks: unknown[];
 }
 
+export interface ModelProvider {
+  id: string;
+  name: string;
+  base_url: string;
+  model: string;
+  has_api_key: boolean;
+  active: boolean;
+}
+
+export interface ModelSettings {
+  providers: ModelProvider[];
+  active_provider_id: string | null;
+  active_label: string;
+  config_path: string;
+}
+
 const taskStatusLabels = {
   pending: "Pending",
   in_progress: "In progress",

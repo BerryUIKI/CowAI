@@ -89,3 +89,6 @@ jobs:
 
       - name: Clippy Tauri backend
         run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
+
+      - name: Test Tauri backend
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked

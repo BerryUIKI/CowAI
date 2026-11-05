@@ -11,6 +11,7 @@ import type {
   ChannelMessage,
   ClientSession,
   CowEvent,
+  ModelSettings,
   Run,
   Task,
   TemplateDocument,
@@ -113,4 +114,48 @@ export function pendingApprovals(): Promise<Approval[]> {
 
 export function decideApproval(approvalId: string, approved: boolean): Promise<Approval> {
   return invoke<Approval>("decide_approval", { approvalId, approved });
+}
+
+export function getModelSettings(): Promise<ModelSettings> {
+  return invoke<ModelSettings>("get_model_settings");
+}
+
+export function saveModelProvider(input: {
+  providerId: string | null;
+  name: string;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+  clearApiKey: boolean;
+}): Promise<ModelSettings> {
+  return invoke<ModelSettings>("save_model_provider", {
+    providerId: input.providerId,
+    name: input.name,
+    baseUrl: input.baseUrl,
+    model: input.model,
+    apiKey: input.apiKey.trim() ? input.apiKey : null,
+    clearApiKey: input.clearApiKey,
+  });
+}
+
+export function deleteModelProvider(providerId: string): Promise<ModelSettings> {
+  return invoke<ModelSettings>("delete_model_provider", { providerId });
+}
+
+export function activateModelProvider(providerId: string | null): Promise<ModelSettings> {
+  return invoke<ModelSettings>("activate_model_provider", { providerId });
+}
+
+export function testModelProvider(input: {
+  providerId: string | null;
+  baseUrl: string;
+  model: string;
+  apiKey: string;
+}): Promise<string> {
+  return invoke<string>("test_model_provider", {
+    providerId: input.providerId,
+    baseUrl: input.baseUrl,
+    model: input.model,
+    apiKey: input.apiKey.trim() ? input.apiKey : null,
+  });
 }

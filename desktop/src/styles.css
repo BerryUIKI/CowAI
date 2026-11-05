@@ -1107,7 +1107,7 @@ button {
   gap: 16px;
   margin: 14px 0 0;
   padding: 16px 18px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: 9px;
 }
 
@@ -1135,7 +1135,7 @@ button {
 
 .settings-card {
   padding: 14px 16px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: 9px;
   background: rgba(255, 255, 255, 0.015);
 }
@@ -1180,12 +1180,110 @@ button {
 
 .settings-badge {
   padding: 2px 7px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--rule);
   border-radius: 999px;
   color: var(--paper-dim);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.settings-badge-active {
+  border-color: var(--brass);
+  color: var(--brass);
+}
+
+.settings-active {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 14px 16px;
+  border: 1px solid var(--brass);
+  border-radius: 9px;
+  background: var(--brass-soft);
+}
+
+.settings-active-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-active-body p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.settings-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.settings-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 720px;
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.settings-form-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.settings-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--paper-faint);
+  font-size: 12px;
+}
+
+.settings-status {
+  max-width: 720px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.settings-status.is-ok {
+  color: var(--sage);
+}
+
+.settings-status.is-error {
+  color: var(--danger);
+}
+
+.settings-note {
+  max-width: 720px;
+  margin: 12px 0 0;
+  color: var(--paper-faint);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.settings-add-button {
+  margin-top: 12px;
+  padding: 9px 13px;
+  border: 1px dashed var(--rule-strong);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--paper-dim);
+  font-size: 13px;
+}
+
+.settings-add-button:hover {
+  border-color: var(--paper-faint);
+  color: var(--paper);
 }
 
 .agent-avatar {
@@ -1385,7 +1483,8 @@ button {
 
   .task-detail,
   .task-form-view,
-  .approvals-view {
+  .approvals-view,
+  .settings-view {
     padding: 24px 20px 32px;
   }
 
@@ -1398,6 +1497,10 @@ button {
   }
 
   .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-form-row {
     grid-template-columns: 1fr;
   }
 

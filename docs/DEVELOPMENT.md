@@ -48,6 +48,7 @@ cd desktop
 npm ci
 npm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
@@ -57,7 +58,9 @@ Use `npm run tauri dev` for the native shell. See [desktop prerequisites](../des
 
 `init` and `run` accept `--db`, falling back to `COWBOT_DB`, then `cowbot.db` in the current directory. Desktop uses `app_data_dir()/cowbot.db`; its state is separate by default. Protect database files and backups as potentially sensitive local data.
 
-`run` accepts `--model` (default `gpt-4o`), `--base-url` / `OPENAI_BASE_URL`, `--api-key` / `OPENAI_API_KEY`, `--dry-run`, and `--approval` (default `ask`). With neither key nor URL it uses the mock; `--dry-run` forces the mock. A key alone selects the OpenAI endpoint. The HTTP client appends `/chat/completions`. Config files and automatic `.env` loading are not implemented. Streaming, retries, and rate limiting remain gaps.
+`run` accepts `--model` (default `gpt-4o`), `--base-url` / `OPENAI_BASE_URL`, `--api-key` / `OPENAI_API_KEY`, `--dry-run`, and `--approval` (default `ask`). With neither key nor URL it uses the mock; `--dry-run` forces the mock. A key alone selects the OpenAI endpoint. The HTTP client appends `/chat/completions`. CLI config files and automatic `.env` loading are not implemented. Streaming, retries, and rate limiting remain gaps.
+
+The desktop keeps its model providers in `app_data_dir()/config.json` (ADR-0012): a list of OpenAI-compatible endpoints, the active provider, and API keys stored in plain text. The Settings view adds, edits, tests, and switches providers; changes take effect without a restart, and no provider selected means the offline mock model. Environment variables do not configure the desktop; the CLI does not read this file. Protect `config.json` as sensitive local data and keep it out of packages and backups shared with others.
 
 Approval policies are `ask`, `safe-auto`, `plan-only`, and `trusted`. Headless callers should select an appropriate policy; `ask` prompts on stdin and EOF rejects. Review [ADR 0003](ADR/0003-risk-classification-and-approval.md) and [ADR 0008](ADR/0008-cli-and-local-execution.md). Approval is not OS isolation; see [Security](../SECURITY.md).
 

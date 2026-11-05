@@ -136,13 +136,28 @@ OpenMausBot treats bots as contacts, groups them into departments, gives each ch
 
 ---
 
-## 4. Adoption Summary
+## 4. CC Switch
+
+Repository: <https://github.com/farion1231/cc-switch>
+
+CC Switch is a desktop manager that keeps several API provider configurations for coding agents and switches the active one in a click, instead of hand-editing JSON/TOML/YAML files.
+
+- Providers are stored as a named list with endpoint, model, and credentials; one is active at a time.
+- Switching applies immediately to the running app.
+- Provider management is separate from agent/tool settings and from workspace data.
+
+**CowBot implementation (Phase 1.6)**: the desktop settings view stores OpenAI-compatible providers in `app_data_dir()/config.json`, marks one as active, and rebuilds the runtime LLM client without a restart (ADR-0012). Keys stay on the local machine and never enter `.cowpkg` exports. Provider presets for common endpoints exist in the form; per-agent model selection and import/export of provider lists are follow-up work.
+
+---
+
+## 5. Adoption Summary
 
 | Idea | Source | CowBot phase | Decision |
 | --- | --- | --- | --- |
 | Role/goal/backstory agents, task dependencies | CrewAI | Done | Adopted |
 | Channels, threads, multi-user workspaces | Mattermost | In progress | Adopted |
 | Assignment tree, lifecycle, event log, budgets, restart | OpenMausBot | 1.4 | Adopted (simplified) |
+| Provider list, one-click switch, local credentials | CC Switch | 1.6 | Adopted (local `config.json`, ADR-0012) |
 | Per-task approval overrides and inheritance | OpenMausBot | 1.5 | Adopted (assignment-level + inheritance) |
 | Static allowlists and own-workspace reads | OpenMausBot | 1.5 | Partially: static risk + policy; saved grants later |
 | Markdown project memory with budget and recall | OpenMausBot | P1 | Adopt |
