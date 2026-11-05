@@ -45,14 +45,14 @@ Desktop changes require separate checks; root workspace commands do not cover Ta
 
 ```sh
 cd desktop
-npm ci
-npm run build
+pnpm install --frozen-lockfile
+pnpm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml --locked
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
 ```
 
-Use `npm run tauri dev` for the native shell. See [desktop prerequisites](../desktop/README.md); a browser-only Vite preview does not supply the native client backend.
+Use `pnpm run tauri dev` for the native shell. See [desktop prerequisites](../desktop/README.md); a browser-only Vite preview does not supply the native client backend.
 
 Desktop release bundles are built by [`.github/workflows/release.yml`](../.github/workflows/release.yml) on manual dispatch and on `v*` tags: NSIS/MSI on Windows, a universal DMG on macOS, and deb/AppImage on Linux. Manual runs upload workflow artifacts; tag runs create draft GitHub Releases that a maintainer publishes after review. Tags must match the version in `desktop/src-tauri/tauri.conf.json`. Builds are unsigned; see [ADR-0014](ADR/0014-desktop-release-builds.md).
 

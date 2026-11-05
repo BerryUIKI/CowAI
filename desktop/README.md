@@ -28,15 +28,15 @@ not configure the desktop (the CLI keeps its flags and environment variables).
 
 ## Prerequisites
 
-- Node.js 20+ and npm
+- Node.js 22.13+ and pnpm (`corepack enable pnpm`, or `npm install -g pnpm`)
 - Rust toolchain
 - On Windows, the WebView2 runtime (already present on current Windows 10/11)
 
 ## Run
 
 ```bash
-npm install
-npm run tauri dev
+pnpm install
+pnpm run tauri dev
 ```
 
 The dev server runs on `http://localhost:1420`; the Tauri window opens once the
@@ -45,8 +45,8 @@ backend compiles.
 ## Build
 
 ```bash
-npm run build                    # type-check and bundle the frontend
-npm run tauri build              # produce platform bundles
+pnpm run build                    # type-check and bundle the frontend
+pnpm run tauri build              # produce platform bundles
 ```
 
 ## Release builds
@@ -64,9 +64,9 @@ Builds are unsigned: macOS may require allowing the app in System Settings, and 
 Build bundles locally with:
 
 ```bash
-npm run tauri build -- --bundles nsis,msi      # Windows
-npm run tauri build -- --bundles dmg           # macOS
-npm run tauri build -- --bundles deb,appimage  # Linux
+pnpm run tauri build -- --bundles nsis,msi      # Windows
+pnpm run tauri build -- --bundles dmg           # macOS
+pnpm run tauri build -- --bundles deb,appimage  # Linux
 ```
 
 Bundles are written under `src-tauri/target/release/bundle/`, or under the target-specific directory when `--target` is used.
@@ -74,7 +74,7 @@ Bundles are written under `src-tauri/target/release/bundle/`, or under the targe
 ## Quality checks
 
 ```bash
-npm run build
+pnpm run build
 cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
 cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings

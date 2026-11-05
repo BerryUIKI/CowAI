@@ -146,11 +146,11 @@ The subprocess backend runs host commands with the current user's permissions. A
 
 ```sh
 cd desktop
-npm ci
-npm run tauri dev
+pnpm install
+pnpm run tauri dev
 ```
 
-Install Node.js/npm and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation, crew execution, approvals, and agents/templates settings. Model selection, workspace import/export, and installer packaging are not implemented yet.
+Install Node.js 22.13+, pnpm, and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation, crew execution, approvals, and agents/templates settings. Model selection, workspace import/export, and installer packaging are not implemented yet.
 
 ## Architecture
 
