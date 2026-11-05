@@ -177,9 +177,12 @@ export interface TemplateDocument {
   tasks: unknown[];
 }
 
+export type ProviderProtocol = "openai" | "anthropic" | "openai-responses";
+
 export interface ModelProvider {
   id: string;
   name: string;
+  protocol: ProviderProtocol;
   base_url: string;
   model: string;
   has_api_key: boolean;
@@ -195,6 +198,13 @@ export interface ModelSettings {
 
 export interface OnboardingState {
   completed: boolean;
+}
+
+export interface WorkspaceSummary {
+  database: string;
+  name: string;
+  active: boolean;
+  available: boolean;
 }
 
 const taskStatusLabels = {

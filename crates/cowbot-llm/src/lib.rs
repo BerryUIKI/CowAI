@@ -1,11 +1,16 @@
+pub mod anthropic;
+mod endpoint;
 pub mod mock;
 pub mod openai;
 pub mod provider;
+pub mod responses;
 pub mod types;
 
+pub use anthropic::AnthropicProvider;
 pub use mock::MockLlmProvider;
 pub use openai::OpenAiCompatibleProvider;
 pub use provider::LlmProvider;
+pub use responses::ResponsesProvider;
 pub use types::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatRole, LlmToolCall,
 };

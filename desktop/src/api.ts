@@ -13,10 +13,12 @@ import type {
   CowEvent,
   ModelSettings,
   OnboardingState,
+  ProviderProtocol,
   Run,
   Task,
   TemplateDocument,
   ToolCallRecord,
+  WorkspaceSummary,
 } from "./types";
 
 export function getSession(): Promise<ClientSession> {
@@ -123,6 +125,7 @@ export function getModelSettings(): Promise<ModelSettings> {
 
 export function saveModelProvider(input: {
   providerId: string | null;
+  protocol: ProviderProtocol;
   name: string;
   baseUrl: string;
   model: string;
@@ -130,12 +133,15 @@ export function saveModelProvider(input: {
   clearApiKey: boolean;
 }): Promise<ModelSettings> {
   return invoke<ModelSettings>("save_model_provider", {
-    providerId: input.providerId,
-    name: input.name,
-    baseUrl: input.baseUrl,
-    model: input.model,
-    apiKey: input.apiKey.trim() ? input.apiKey : null,
-    clearApiKey: input.clearApiKey,
+    draft: {
+      providerId: input.providerId,
+      protocol: input.protocol,
+      name: input.name,
+      baseUrl: input.baseUrl,
+      model: input.model,
+      apiKey: input.apiKey.trim() ? input.apiKey : null,
+      clearApiKey: input.clearApiKey,
+    },
   });
 }
 
@@ -149,12 +155,14 @@ export function activateModelProvider(providerId: string | null): Promise<ModelS
 
 export function testModelProvider(input: {
   providerId: string | null;
+  protocol: ProviderProtocol;
   baseUrl: string;
   model: string;
   apiKey: string;
 }): Promise<string> {
   return invoke<string>("test_model_provider", {
     providerId: input.providerId,
+    protocol: input.protocol,
     baseUrl: input.baseUrl,
     model: input.model,
     apiKey: input.apiKey.trim() ? input.apiKey : null,
@@ -167,4 +175,24 @@ export function getOnboardingState(): Promise<OnboardingState> {
 
 export function completeOnboarding(): Promise<OnboardingState> {
   return invoke<OnboardingState>("complete_onboarding");
+}
+
+export function listWorkspaces(): Promise<WorkspaceSummary[]> {
+  return invoke<WorkspaceSummary[]>("list_workspaces");
+}
+
+export function switchWorkspace(database: string): Promise<void> {
+  return invoke<void>("switch_workspace", { database });
+}
+
+export function exportWorkspace(path: string): Promise<string> {
+  return invoke<string>("export_workspace", { path });
+}
+
+export function importWorkspace(path: string): Promise<void> {
+  return invoke<void>("import_workspace", { path });
+}
+
+export function createWorkspace(name: string): Promise<void> {
+  return invoke<void>("create_workspace", { name });
 }

@@ -1,0 +1,450 @@
+//! Client for the Anthropic Messages API (`POST /v1/messages`).
+//!
+//! Works with the official Anthropic endpoint and with relays that expose the
+//! same protocol, such as Claude Code-compatible proxies. The API key is sent
+//! both as `x-api-key` (official API) and as a bearer token (relays configured
+//! with `ANTHROPIC_AUTH_TOKEN`).
+
+use crate::endpoint::endpoint_url;
+use crate::provider::LlmProvider;
+use crate::types::{
+    ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatRole, LlmToolCall,
+};
+use async_trait::async_trait;
+use cowbot_core::error::{CowError, CowResult};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
+use serde_json::{json, Value};
+use tracing::{debug, error};
+
+const ANTHROPIC_VERSION: &str = "2023-06-01";
+
+/// `max_tokens` is required by the Messages API. Agent replies are bounded by
+/// the runtime loop, so a fixed ceiling keeps provider configuration small.
+const DEFAULT_MAX_TOKENS: u32 = 4096;
+
+/// Client for any Anthropic Messages-compatible API endpoint.
+#[derive(Clone)]
+pub struct AnthropicProvider {
+    client: reqwest::Client,
+    base_url: String,
+    api_key: Option<String>,
+}
+
+impl AnthropicProvider {
+    pub fn new(base_url: impl Into<String>, api_key: Option<String>) -> Self {
+        Self {
+            client: reqwest::Client::new(),
+            base_url: base_url.into(),
+            api_key,
+        }
+    }
+
+    fn messages_url(&self) -> String {
+        endpoint_url(&self.base_url, "/messages")
+    }
+}
+
+fn auth_headers(api_key: Option<&str>) -> HeaderMap {
+    let mut headers = HeaderMap::new();
+    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    headers.insert(
+        HeaderName::from_static("anthropic-version"),
+        HeaderValue::from_static(ANTHROPIC_VERSION),
+    );
+
+    if let Some(key) = api_key {
+        if let Ok(value) = HeaderValue::from_str(key) {
+            headers.insert(HeaderName::from_static("x-api-key"), value);
+        }
+        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
+            headers.insert(AUTHORIZATION, value);
+        }
+    }
+
+    headers
+}
+
+/// Convert the internal chat history into an Anthropic system prompt and
+/// message list.
+///
+/// Assistant tool calls become `tool_use` blocks, and consecutive tool results
+/// collapse into a single user message of `tool_result` blocks, which is the
+/// shape the Messages API expects.
+fn convert_messages(messages: &[ChatMessage]) -> (Option<String>, Vec<Value>) {
+    let mut system_parts = Vec::new();
+    let mut converted = Vec::new();
+    let mut index = 0;
+
+    while index < messages.len() {
+        let message = &messages[index];
+        match message.role {
+            ChatRole::System => {
+                if !message.content.is_empty() {
+                    system_parts.push(message.content.clone());
+                }
+                index += 1;
+            }
+            ChatRole::User => {
+                converted.push(json!({
+                    "role": "user",
+                    "content": &message.content,
+                }));
+                index += 1;
+            }
+            ChatRole::Assistant => {
+                let mut blocks = Vec::new();
+                if !message.content.is_empty() {
+                    blocks.push(json!({
+                        "type": "text",
+                        "text": &message.content,
+                    }));
+                }
+                if let Some(tool_calls) = &message.tool_calls {
+                    for call in tool_calls {
+                        blocks.push(json!({
+                            "type": "tool_use",
+                            "id": &call.id,
+                            "name": &call.name,
+                            "input": &call.arguments,
+                        }));
+                    }
+                }
+                if !blocks.is_empty() {
+                    converted.push(json!({
+                        "role": "assistant",
+                        "content": blocks,
+                    }));
+                }
+                index += 1;
+            }
+            ChatRole::Tool => {
+                let mut blocks = Vec::new();
+                while index < messages.len() && messages[index].role == ChatRole::Tool {
+                    let tool_message = &messages[index];
+                    blocks.push(json!({
+                        "type": "tool_result",
+                        "tool_use_id": tool_message.tool_call_id.clone().unwrap_or_default(),
+                        "content": &tool_message.content,
+                    }));
+                    index += 1;
+                }
+                converted.push(json!({
+                    "role": "user",
+                    "content": blocks,
+                }));
+            }
+        }
+    }
+
+    let system = if system_parts.is_empty() {
+        None
+    } else {
+        Some(system_parts.join("\n\n"))
+    };
+
+    (system, converted)
+}
+
+fn request_body(request: &ChatCompletionRequest) -> Value {
+    let (system, messages) = convert_messages(&request.messages);
+
+    let mut body = json!({
+        "model": &request.model,
+        "max_tokens": DEFAULT_MAX_TOKENS,
+        "messages": messages,
+    });
+
+    if let Some(system) = system {
+        body["system"] = Value::String(system);
+    }
+
+    if let Some(temperature) = request.temperature {
+        body["temperature"] = json!(temperature);
+    }
+
+    if !request.tools.is_empty() {
+        let tools: Vec<Value> = request
+            .tools
+            .iter()
+            .map(|tool| {
+                json!({
+                    "name": &tool.name,
+                    "description": &tool.description,
+                    "input_schema": &tool.parameters,
+                })
+            })
+            .collect();
+        body["tools"] = Value::Array(tools);
+    }
+
+    body
+}
+
+fn parse_response(value: Value) -> CowResult<ChatCompletionResponse> {
+    let blocks = value
+        .get("content")
+        .and_then(Value::as_array)
+        .ok_or_else(|| CowError::Llm("Response did not contain a content array".to_string()))?;
+
+    let mut text_parts = Vec::new();
+    let mut tool_calls = Vec::new();
+
+    for block in blocks {
+        match block.get("type").and_then(Value::as_str) {
+            Some("text") => {
+                if let Some(text) = block.get("text").and_then(Value::as_str) {
+                    text_parts.push(text.to_string());
+                }
+            }
+            Some("tool_use") => {
+                let id = block
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let name = block
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                let arguments = block.get("input").cloned().unwrap_or_else(|| json!({}));
+                tool_calls.push(LlmToolCall {
+                    id,
+                    name,
+                    arguments,
+                });
+            }
+            _ => {}
+        }
+    }
+
+    let content = if text_parts.is_empty() {
+        None
+    } else {
+        Some(text_parts.join("\n"))
+    };
+    let finish_reason = value
+        .get("stop_reason")
+        .and_then(Value::as_str)
+        .map(str::to_string);
+
+    Ok(ChatCompletionResponse {
+        content,
+        tool_calls,
+        finish_reason,
+    })
+}
+
+#[async_trait]
+impl LlmProvider for AnthropicProvider {
+    fn name(&self) -> &str {
+        "anthropic"
+    }
+
+    async fn chat_complete(
+        &self,
+        request: &ChatCompletionRequest,
+    ) -> CowResult<ChatCompletionResponse> {
+        let url = self.messages_url();
+        debug!(url = %url, model = %request.model, "Dispatching Anthropic messages request");
+
+        let response = self
+            .client
+            .post(&url)
+            .headers(auth_headers(self.api_key.as_deref()))
+            .json(&request_body(request))
+            .send()
+            .await
+            .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let err_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            error!(status = %status, body = %err_text, "LLM provider returned non-200 status");
+            return Err(CowError::Llm(format!(
+                "API returned error status {}: {}",
+                status, err_text
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| CowError::Llm(format!("Failed to parse response JSON: {}", e)))?;
+
+        parse_response(payload)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cowbot_core::tool::ToolDefinition;
+    use serde_json::json;
+
+    fn tool_call(id: &str, name: &str, arguments: Value) -> LlmToolCall {
+        LlmToolCall {
+            id: id.to_string(),
+            name: name.to_string(),
+            arguments,
+        }
+    }
+
+    #[test]
+    fn system_messages_become_the_top_level_prompt() {
+        let messages = vec![
+            ChatMessage::system("You are CowBot."),
+            ChatMessage::system("Be concise."),
+            ChatMessage::user("Hello"),
+        ];
+
+        let (system, converted) = convert_messages(&messages);
+
+        assert_eq!(system.as_deref(), Some("You are CowBot.\n\nBe concise."));
+        assert_eq!(converted, vec![json!({"role": "user", "content": "Hello"})]);
+    }
+
+    #[test]
+    fn assistant_tool_calls_become_tool_use_blocks() {
+        let mut assistant = ChatMessage::assistant("Let me look.");
+        assistant.tool_calls = Some(vec![tool_call(
+            "toolu_1",
+            "read_file",
+            json!({"path": "a.txt"}),
+        )]);
+        let messages = vec![
+            ChatMessage::user("Read a.txt"),
+            assistant,
+            ChatMessage::tool("file contents", "toolu_1"),
+        ];
+
+        let (system, converted) = convert_messages(&messages);
+
+        assert!(system.is_none());
+        assert_eq!(
+            converted,
+            vec![
+                json!({"role": "user", "content": "Read a.txt"}),
+                json!({
+                    "role": "assistant",
+                    "content": [
+                        {"type": "text", "text": "Let me look."},
+                        {"type": "tool_use", "id": "toolu_1", "name": "read_file", "input": {"path": "a.txt"}}
+                    ]
+                }),
+                json!({
+                    "role": "user",
+                    "content": [
+                        {"type": "tool_result", "tool_use_id": "toolu_1", "content": "file contents"}
+                    ]
+                }),
+            ]
+        );
+    }
+
+    #[test]
+    fn consecutive_tool_results_share_one_user_message() {
+        let mut assistant = ChatMessage::assistant("");
+        assistant.tool_calls = Some(vec![
+            tool_call("toolu_1", "read_file", json!({"path": "a.txt"})),
+            tool_call("toolu_2", "read_file", json!({"path": "b.txt"})),
+        ]);
+        let messages = vec![
+            ChatMessage::user("Read both"),
+            assistant,
+            ChatMessage::tool("a", "toolu_1"),
+            ChatMessage::tool("b", "toolu_2"),
+        ];
+
+        let (_, converted) = convert_messages(&messages);
+
+        assert_eq!(
+            converted[1],
+            json!({
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "read_file", "input": {"path": "a.txt"}},
+                    {"type": "tool_use", "id": "toolu_2", "name": "read_file", "input": {"path": "b.txt"}}
+                ]
+            })
+        );
+        assert_eq!(
+            converted[2],
+            json!({
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": "a"},
+                    {"type": "tool_result", "tool_use_id": "toolu_2", "content": "b"}
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn tools_use_the_anthropic_input_schema_shape() {
+        let request = ChatCompletionRequest {
+            model: "claude-sonnet-5-5".to_string(),
+            messages: vec![ChatMessage::user("hi")],
+            tools: vec![ToolDefinition {
+                name: "read_file".to_string(),
+                description: "Read a file".to_string(),
+                parameters: json!({"type": "object", "properties": {"path": {"type": "string"}}}),
+            }],
+            temperature: Some(0.5),
+        };
+
+        let body = request_body(&request);
+
+        assert_eq!(body["max_tokens"], 4096);
+        assert_eq!(body["temperature"], 0.5);
+        assert_eq!(
+            body["tools"],
+            json!([{
+                "name": "read_file",
+                "description": "Read a file",
+                "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}}
+            }])
+        );
+        assert!(body.get("system").is_none());
+    }
+
+    #[test]
+    fn parses_text_and_tool_use_content() {
+        let payload = json!({
+            "content": [
+                {"type": "text", "text": "Checking."},
+                {"type": "tool_use", "id": "toolu_9", "name": "run", "input": {"cmd": "ls"}}
+            ],
+            "stop_reason": "tool_use"
+        });
+
+        let response = parse_response(payload).unwrap();
+
+        assert_eq!(response.content.as_deref(), Some("Checking."));
+        assert_eq!(response.tool_calls.len(), 1);
+        assert_eq!(response.tool_calls[0].id, "toolu_9");
+        assert_eq!(response.tool_calls[0].name, "run");
+        assert_eq!(response.tool_calls[0].arguments, json!({"cmd": "ls"}));
+        assert_eq!(response.finish_reason.as_deref(), Some("tool_use"));
+    }
+
+    #[test]
+    fn missing_content_is_an_error() {
+        assert!(parse_response(json!({"stop_reason": "end_turn"})).is_err());
+    }
+
+    #[test]
+    fn endpoint_accepts_base_and_full_urls() {
+        let provider = AnthropicProvider::new("http://127.0.0.1:8788", None);
+        assert_eq!(provider.messages_url(), "http://127.0.0.1:8788/v1/messages");
+
+        let provider = AnthropicProvider::new("https://api.anthropic.com/v1/messages", None);
+        assert_eq!(
+            provider.messages_url(),
+            "https://api.anthropic.com/v1/messages"
+        );
+    }
+}

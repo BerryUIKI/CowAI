@@ -58,7 +58,7 @@ CowBot fills exactly this gap: **a self-hosted, channel-native multi-agent team 
 
 - **Collaborate like colleagues, not like tools**: channels, threads, tasks, and approvals are first-class.
 - **Self-hosted, data-sovereign**: deploy on a workstation or private network; data stays on your infrastructure.
-- **Model-neutral**: works with OpenAI-compatible cloud models and local models, chosen per task.
+- **Model-neutral**: works with OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including cloud APIs and local models, chosen per task.
 - **Verifiable execution**: agent code runs for real in a sandbox, and results are inspectable.
 - **Open and extensible**: agent roles, tools, workflows, and access methods are all extensible.
 
@@ -143,7 +143,7 @@ CowBot follows a "single core, two forms" model:
 | Tasks and orchestration | Task creation, assignment runtime (lifecycle, event log, budgets, restart reconciliation), sequential crew execution, deliverables, run and tool-call history, and status transitions |
 | Tools and sandbox | Code execution, file read/write; timeouts, output truncation, working-directory limits |
 | Approval policy | Modes (Ask / SafeAuto / PlanOnly / Trusted); static risk levels (ReadOnly–Critical); optional LLM classifier that can only raise risk; tool/command/path allowlists |
-| Model configuration | OpenAI-compatible endpoints (cloud APIs and local models), connection test |
+| Model configuration | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints (cloud APIs and local models), protocol selection, connection test |
 | Persistence | SQLite (WAL) for workspaces, channels, messages, tasks, agent configuration, and approval records |
 | CLI | `cowbot` retained for initialization, diagnostics, headless runs, and debugging |
 

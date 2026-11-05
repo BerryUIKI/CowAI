@@ -35,6 +35,9 @@ pub enum CowError {
 
     #[error("Storage error: {0}")]
     Storage(String),
+
+    #[error("Workspace package error: {0}")]
+    Package(String),
 }
 
 pub type CowResult<T> = Result<T, CowError>;

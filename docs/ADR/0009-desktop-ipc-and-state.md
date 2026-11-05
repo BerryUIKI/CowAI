@@ -18,7 +18,7 @@ The desktop app lives under `desktop/`:
 - `desktop/` — React 19 + TypeScript + Vite frontend.
 - `desktop/src-tauri/` — Tauri v2 Rust backend, a **standalone Cargo project** (`[workspace]` empty), depending on `cow-client`/`cow-core` by path.
 
-Keeping `src-tauri` outside the root workspace keeps the established `cargo fmt/clippy/test --workspace` gates fast and free of Tauri toolchain requirements. Desktop checks run separately (`npm run build`, `cargo clippy --manifest-path src-tauri/Cargo.toml ...`).
+Keeping `src-tauri` outside the root workspace keeps the established `cargo fmt/clippy/test --workspace` gates fast and free of Tauri toolchain requirements. Desktop checks run separately (`pnpm run build`, `cargo clippy --manifest-path src-tauri/Cargo.toml ...`).
 
 ### 2. Command boundary
 

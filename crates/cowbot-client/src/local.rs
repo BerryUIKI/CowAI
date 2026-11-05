@@ -16,14 +16,14 @@ use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_service::{
-    bootstrap_local, ApprovalService, AssignmentService, ChannelService, CrewRunner, TaskService,
-    TemplateService,
+    bootstrap_local, bootstrap_local_named, ApprovalService, AssignmentService, ChannelService,
+    CrewRunner, LocalContext, TaskService, TemplateService,
 };
 use cowbot_store::Store;
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
-use crate::{Client, ClientSession, ClientUser, EventStream, NewTask};
+use crate::{Client, ClientSession, ClientUser, EventStream, NewTask, WorkspaceImport};
 
 /// In-process client backed by `cowbot-store` and `cowbot-service`.
 pub struct LocalClient {
@@ -53,7 +53,10 @@ impl LocalClient {
     async fn initialize(store: Store, bus: EventBus) -> CowResult<Self> {
         store.migrate().await?;
         let context = bootstrap_local(&store).await?;
+        Self::build(store, bus, context).await
+    }
 
+    async fn build(store: Store, bus: EventBus, context: LocalContext) -> CowResult<Self> {
         let assignments = AssignmentService::new(store.clone(), bus.clone());
         assignments.reconcile_on_startup().await?;
         let approvals =
@@ -86,6 +89,57 @@ impl LocalClient {
 
     fn user_sender(&self) -> Sender {
         Sender::User(self.session.user.id.0.clone())
+    }
+
+    /// Export the current workspace as a `.cowpkg` archive.
+    pub async fn export_workspace(&self) -> CowResult<Vec<u8>> {
+        cowbot_package::export_workspace(&self.store, &self.session.workspace.id)
+            .await
+            .map_err(|error| CowError::Package(error.to_string()))
+    }
+
+    /// Create a new local database from a `.cowpkg` archive.
+    ///
+    /// Import keeps the package's entity ids, so callers must pass a fresh
+    /// database path. Bootstrap reuses the imported owner and workspace, and
+    /// the returned summary describes what was written.
+    pub async fn create_from_package(
+        path: impl AsRef<Path>,
+        bytes: &[u8],
+    ) -> CowResult<(Self, WorkspaceImport)> {
+        let store = Store::connect(path).await?;
+        store.migrate().await?;
+        let summary = cowbot_package::import_workspace(&store, bytes)
+            .await
+            .map_err(|error| CowError::Package(error.to_string()))?;
+        let client = Self::initialize(store, EventBus::default_bus()).await?;
+
+        Ok((
+            client,
+            WorkspaceImport {
+                workspace_id: summary.workspace_id.0,
+                workspace_name: summary.workspace_name,
+                channels: summary.channels,
+                messages: summary.messages,
+                agents: summary.agents,
+                tasks: summary.tasks,
+                runs: summary.runs,
+                audit_events: summary.audit_events,
+            },
+        ))
+    }
+
+    /// Create a new local database with an empty workspace named `name`.
+    pub async fn create_workspace_database(path: impl AsRef<Path>, name: &str) -> CowResult<Self> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CowError::Config("workspace name is required".to_string()));
+        }
+
+        let store = Store::connect(path).await?;
+        store.migrate().await?;
+        let context = bootstrap_local_named(&store, "Local Owner", name).await?;
+        Self::build(store, EventBus::default_bus(), context).await
     }
 
     /// Execute a sequential crew through the local assignment runtime.
@@ -436,5 +490,46 @@ mod tests {
 
         let audit = client.list_audit_events(10).await.unwrap();
         assert!(audit.iter().any(|event| event.action == "test.action"));
+    }
+
+    #[tokio::test]
+    async fn workspace_package_round_trips_into_a_new_database() {
+        let client = LocalClient::open_in_memory().await.unwrap();
+        client.create_channel("general", "General").await.unwrap();
+        let bytes = client.export_workspace().await.unwrap();
+
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("imported.db");
+        let (imported, summary) = LocalClient::create_from_package(&path, &bytes)
+            .await
+            .unwrap();
+
+        assert_eq!(summary.channels, 1);
+        assert!(summary.workspace_name.ends_with("(imported)"));
+
+        let session = imported.session().await.unwrap();
+        assert_eq!(session.workspace.id.0, summary.workspace_id);
+        assert_eq!(session.workspace.name, summary.workspace_name);
+
+        let channels = imported.list_channels().await.unwrap();
+        assert!(channels.iter().any(|channel| channel.name == "general"));
+    }
+
+    #[tokio::test]
+    async fn new_workspace_databases_use_the_requested_name() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("team.db");
+
+        let client = LocalClient::create_workspace_database(&path, "Team Workspace")
+            .await
+            .unwrap();
+        let session = client.session().await.unwrap();
+
+        assert_eq!(session.workspace.name, "Team Workspace");
+        assert_eq!(session.user.name, "Local Owner");
+        assert!(client.list_channels().await.unwrap().is_empty());
+        assert!(LocalClient::create_workspace_database(&path, "  ")
+            .await
+            .is_err());
     }
 }

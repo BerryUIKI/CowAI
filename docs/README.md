@@ -4,6 +4,7 @@ Start with the root [README](../README.md) for implemented functionality and a r
 
 | Audience | Guide |
 | --- | --- |
+| Users | [Desktop user guide](USER_GUIDE.md) |
 | Developers | [Development and troubleshooting](DEVELOPMENT.md) |
 | Contributors | [Contributing](../CONTRIBUTING.md) |
 | Collaborators and reviewers | [Collaboration workflow](COLLABORATION.md) |
@@ -14,7 +15,7 @@ Start with the root [README](../README.md) for implemented functionality and a r
 
 ## Reading design documents
 
-The PRD, architecture, roadmap, and ADRs include both implemented milestones and future scope. Milestones 1.1–1.5 and parts of 1.6 are implemented: persistence, services, approvals, a local client, CLI integration, and a desktop shell. Check the root README and source for precise availability; starting execution from the desktop remains follow-up work.
+The PRD, architecture, roadmap, and ADRs include both implemented milestones and future scope. Phase 1 (milestones 1.1–1.7) is implemented: persistence, services, approvals, a local client, CLI integration, the desktop shell with model providers and workspace transfer, release builds, and the user guide. Phase 2 (self-hosted team mode) has not started. Check the root README and source for precise availability.
 
 ## Visual assets
 

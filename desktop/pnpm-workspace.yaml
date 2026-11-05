@@ -1,0 +1,4 @@
+# pnpm settings live here since pnpm 11 (the package.json "pnpm" field is
+# ignored). Vite needs esbuild's install script to place its native binary.
+allowBuilds:
+  esbuild: true

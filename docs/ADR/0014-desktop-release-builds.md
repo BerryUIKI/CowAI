@@ -6,7 +6,7 @@
 
 ## Context
 
-The desktop app builds locally with `npm run tauri build`, but CI has never
+The desktop app builds locally with `pnpm run tauri build`, but CI has never
 produced installers, so there is no distribution path for the Phase 1 exit
 criterion "a new user can install the app and complete first-run onboarding
 offline". The project has no code-signing certificates, Apple notarization

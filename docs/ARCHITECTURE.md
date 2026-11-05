@@ -98,7 +98,7 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 
 ### 3.6 Model Gateway
 
-- `LlmProvider` abstraction; v1 provides an OpenAI-compatible client (cloud APIs, DeepSeek, Ollama, LocalAI) and a Mock provider.
+- `LlmProvider` abstraction; v1 provides OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses clients (cloud APIs, relays, DeepSeek, Ollama, LocalAI, Codex-style endpoints) plus a Mock provider.
 - Model configuration is workspace- or agent-scoped, with a connection test.
 - P1 adds streaming, retries/backoff, rate limiting, and token/cost accounting.
 
@@ -118,7 +118,7 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 ### 3.9 Access Layer
 
 - **Client abstraction**: `cowbot-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
-- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and settings for agents, templates, and model providers. Providers are OpenAI-compatible endpoints stored in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012), and onboarding records its completion in the same file (ADR-0013). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
+- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and a sectioned settings page in the sidebar footer for model providers, agents, templates, and workspace transfer. Workspaces live one per local database; Settings → Workspace creates empty workspaces, exports the active workspace as `.cowpkg`, imports a package into a new database, and switches between registered databases by restarting the app (ADR-0017). Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — and are stored in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012, ADR-0016), and onboarding records its completion in the same file (ADR-0013). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
 - **HTTP/WebSocket API**: `cowbot-server` serves desktop team mode, the CLI, and a future browser entry point.
 - **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace, `run` executes the sequential crew through the assignment runtime with persisted history and interactive approval prompts. Channel collaboration and template-driven crews are not wired into the CLI yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
@@ -196,7 +196,7 @@ Inspired by Claude Code's permission modes:
 | `cowbot-core` | Domain model, errors, events, `Tool` trait | Existing |
 | `cowbot-bus` | Event bus and subscriptions | Existing |
 | `cowbot-tools` | Tool registry, sandbox backends, and static risk classification | Existing (subprocess) |
-| `cowbot-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
+| `cowbot-llm` | Model providers and types | Existing (OpenAI, Anthropic, Responses + Mock) |
 | `cowbot-agent` | Agent loop and crew orchestration | Existing (sequential) |
 | `cowbot-cli` | `cowbot` CLI | Existing (standalone; not yet wired to `cowbot-service`) |
 | `cowbot-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |

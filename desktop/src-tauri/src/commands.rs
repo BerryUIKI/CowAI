@@ -4,13 +4,15 @@ use cowbot_core::agent::{AgentId, AgentProfile};
 use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
 use cowbot_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
 use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
+use cowbot_core::identity::WorkspaceId;
 use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_llm::{ChatCompletionRequest, ChatMessage};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{config, AppState};
 
@@ -338,6 +340,7 @@ pub async fn decide_approval(
 pub struct ProviderView {
     pub id: String,
     pub name: String,
+    pub protocol: config::ProviderProtocol,
     pub base_url: String,
     pub model: String,
     pub has_api_key: bool,
@@ -377,6 +380,7 @@ fn model_settings(state: &AppState, config: &config::AppConfig) -> ModelSettings
         .map(|provider| ProviderView {
             id: provider.id.clone(),
             name: provider.name.clone(),
+            protocol: provider.protocol,
             base_url: provider.base_url.clone(),
             model: provider.model.clone(),
             has_api_key: provider.api_key.is_some(),
@@ -401,44 +405,59 @@ pub fn get_model_settings(state: State<'_, AppState>) -> Result<ModelSettings, S
     Ok(model_settings(&state, &config))
 }
 
+/// Values submitted by the provider editor.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderDraft {
+    #[serde(default)]
+    pub provider_id: Option<String>,
+    pub protocol: config::ProviderProtocol,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    #[serde(default)]
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub clear_api_key: bool,
+}
+
 /// Apply a create or update to an in-memory configuration.
 ///
 /// A blank API key keeps the stored one; `clear_api_key` removes it. The first
 /// provider added to an empty configuration becomes active.
-fn upsert_provider(
-    config: &mut config::AppConfig,
-    provider_id: Option<&str>,
-    name: &str,
-    base_url: &str,
-    model: &str,
-    api_key: Option<&str>,
-    clear_api_key: bool,
-) -> Result<(), String> {
-    let typed_key = config::normalize_api_key(api_key);
+fn upsert_provider(config: &mut config::AppConfig, draft: &ProviderDraft) -> Result<(), String> {
+    let typed_key = config::normalize_api_key(draft.api_key.as_deref());
 
-    match provider_id {
+    match draft.provider_id.as_deref() {
         Some(id) => {
             let index = config
                 .providers
                 .iter()
                 .position(|provider| provider.id == id)
                 .ok_or_else(|| format!("provider '{id}' was not found"))?;
-            let key = if clear_api_key {
+            let key = if draft.clear_api_key {
                 None
             } else {
                 typed_key.or_else(|| config.providers[index].api_key.clone())
             };
-            config.providers[index] =
-                config::make_provider(id.to_string(), name, base_url, model, key.as_deref())?;
+            config.providers[index] = config::make_provider(
+                id.to_string(),
+                &draft.name,
+                draft.protocol,
+                &draft.base_url,
+                &draft.model,
+                key.as_deref(),
+            )?;
         }
         None => {
             let id = config::new_provider_id(&config.providers);
-            let key = if clear_api_key { None } else { typed_key };
+            let key = if draft.clear_api_key { None } else { typed_key };
             config.providers.push(config::make_provider(
                 id.clone(),
-                name,
-                base_url,
-                model,
+                &draft.name,
+                draft.protocol,
+                &draft.base_url,
+                &draft.model,
                 key.as_deref(),
             )?);
             if config.active_provider().is_none() {
@@ -454,23 +473,10 @@ fn upsert_provider(
 #[tauri::command]
 pub fn save_model_provider(
     state: State<'_, AppState>,
-    provider_id: Option<String>,
-    name: String,
-    base_url: String,
-    model: String,
-    api_key: Option<String>,
-    clear_api_key: bool,
+    draft: ProviderDraft,
 ) -> Result<ModelSettings, String> {
     let mut config = load_config(&state)?;
-    upsert_provider(
-        &mut config,
-        provider_id.as_deref(),
-        &name,
-        &base_url,
-        &model,
-        api_key.as_deref(),
-        clear_api_key,
-    )?;
+    upsert_provider(&mut config, &draft)?;
 
     let config = persist_config(&state, config)?;
     Ok(model_settings(&state, &config))
@@ -545,6 +551,229 @@ pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState
     Ok(onboarding_state(&config))
 }
 
+/// One workspace database offered by the desktop switcher.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceView {
+    pub database: String,
+    pub name: String,
+    pub active: bool,
+    pub available: bool,
+}
+
+fn ensure_no_running_tasks(state: &AppState) -> Result<(), String> {
+    let running = state
+        .running
+        .lock()
+        .map_err(|_| "task state lock was poisoned".to_string())?;
+    if running.is_empty() {
+        Ok(())
+    } else {
+        Err("Wait for running tasks to finish before changing workspaces.".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<WorkspaceView>, String> {
+    let config = load_config(&state)?;
+    let active = config
+        .active_workspace_database
+        .clone()
+        .unwrap_or_else(|| config::DEFAULT_DATABASE.to_string());
+
+    Ok(config
+        .workspaces
+        .iter()
+        .map(|entry| WorkspaceView {
+            database: entry.database.clone(),
+            name: entry.name.clone(),
+            active: entry.database == active,
+            available: config::resolve_database_path(&state.data_dir, &entry.database)
+                .map(|path| path.exists())
+                .unwrap_or(false),
+        })
+        .collect())
+}
+
+/// Switch to another local workspace database and restart the app.
+#[tauri::command]
+pub fn switch_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    database: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+    let path = config::resolve_database_path(&state.data_dir, &database)?;
+    if !path.exists() {
+        return Err("Workspace database was not found.".to_string());
+    }
+
+    let mut config = load_config(&state)?;
+    config.active_workspace_database = Some(database);
+    config::save(&state.config_path, &config)
+        .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))?;
+
+    app.restart();
+}
+
+/// Append the package extension when the save dialog returns a bare name.
+fn package_output_path(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Choose where to save the package.".to_string());
+    }
+
+    let mut path = PathBuf::from(trimmed);
+    let has_extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("cowpkg"))
+        .unwrap_or(false);
+    if !has_extension {
+        path.set_extension("cowpkg");
+    }
+    Ok(path)
+}
+
+fn remove_database_files(path: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+    }
+}
+
+/// Export the current workspace as a `.cowpkg` package.
+#[tauri::command]
+pub async fn export_workspace(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let path = package_output_path(&path)?;
+    let bytes = state
+        .client
+        .export_workspace()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let temporary = path.with_extension("cowpkg.tmp");
+    std::fs::write(&temporary, &bytes)
+        .map_err(|error| format!("failed to write {}: {error}", temporary.display()))?;
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|error| format!("failed to replace {}: {error}", path.display()))?;
+    }
+    if let Err(error) = std::fs::rename(&temporary, &path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("failed to write {}: {error}", path.display()));
+    }
+
+    Ok(path.display().to_string())
+}
+
+/// Import a `.cowpkg` package as a new workspace database and restart.
+#[tauri::command]
+pub async fn import_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    path: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+
+    let source = PathBuf::from(path.trim());
+    if source.as_os_str().is_empty() {
+        return Err("Choose a package to import.".to_string());
+    }
+    let metadata = std::fs::metadata(&source)
+        .map_err(|error| format!("failed to read {}: {error}", source.display()))?;
+    if metadata.len() > cowbot_client::MAX_PACKAGE_BYTES {
+        return Err(format!(
+            "The package is larger than {} MB.",
+            cowbot_client::MAX_PACKAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    let bytes = std::fs::read(&source)
+        .map_err(|error| format!("failed to read {}: {error}", source.display()))?;
+
+    let database = format!("{}/{}.db", config::WORKSPACES_DIR, WorkspaceId::random().0);
+    let database_path = config::resolve_database_path(&state.data_dir, &database)?;
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+
+    let (client, summary) =
+        match cowbot_client::LocalClient::create_from_package(&database_path, &bytes).await {
+            Ok(result) => result,
+            Err(error) => {
+                remove_database_files(&database_path);
+                return Err(error.to_string());
+            }
+        };
+    drop(client);
+
+    let mut config = load_config(&state)?;
+    config.workspaces.push(config::WorkspaceEntry {
+        database: database.clone(),
+        name: summary.workspace_name,
+    });
+    config.active_workspace_database = Some(database);
+    if let Err(error) = config::save(&state.config_path, &config) {
+        remove_database_files(&database_path);
+        return Err(format!(
+            "failed to write {}: {error}",
+            state.config_path.display()
+        ));
+    }
+
+    app.restart();
+}
+
+/// Create a new empty workspace database and restart into it.
+#[tauri::command]
+pub async fn create_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    name: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+
+    let name = name.trim();
+    if name.is_empty() {
+        return Err("Enter a workspace name.".to_string());
+    }
+    if name.chars().count() > 80 {
+        return Err("Workspace names are limited to 80 characters.".to_string());
+    }
+
+    let database = format!("{}/{}.db", config::WORKSPACES_DIR, WorkspaceId::random().0);
+    let database_path = config::resolve_database_path(&state.data_dir, &database)?;
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+
+    let client =
+        match cowbot_client::LocalClient::create_workspace_database(&database_path, name).await {
+            Ok(client) => client,
+            Err(error) => {
+                remove_database_files(&database_path);
+                return Err(error.to_string());
+            }
+        };
+    drop(client);
+
+    let mut config = load_config(&state)?;
+    config.workspaces.push(config::WorkspaceEntry {
+        database: database.clone(),
+        name: name.to_string(),
+    });
+    config.active_workspace_database = Some(database);
+    if let Err(error) = config::save(&state.config_path, &config) {
+        remove_database_files(&database_path);
+        return Err(format!(
+            "failed to write {}: {error}",
+            state.config_path.display()
+        ));
+    }
+
+    app.restart();
+}
+
 /// Send a minimal completion with the drafted provider settings.
 ///
 /// A blank API key falls back to the key stored for `provider_id`, so a saved
@@ -553,6 +782,7 @@ pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState
 pub async fn test_model_provider(
     state: State<'_, AppState>,
     provider_id: Option<String>,
+    protocol: config::ProviderProtocol,
     base_url: String,
     model: String,
     api_key: Option<String>,
@@ -565,7 +795,7 @@ pub async fn test_model_provider(
     let api_key = config::normalize_api_key(api_key.as_deref()).or(stored_key);
     let (base_url, model) = config::validate_endpoint(&base_url, &model)?;
     let resolved = config::ResolvedModel {
-        kind: config::ProviderKind::OpenAiCompatible,
+        kind: config::ProviderKind::Remote(protocol),
         model,
         base_url: Some(base_url),
         api_key,
@@ -641,18 +871,50 @@ mod tests {
         assert!(parse_approval_level("sometimes").is_err());
     }
 
+    fn draft(name: &str, base_url: &str, model: &str, api_key: Option<&str>) -> ProviderDraft {
+        ProviderDraft {
+            provider_id: None,
+            protocol: config::ProviderProtocol::OpenAi,
+            name: name.to_string(),
+            base_url: base_url.to_string(),
+            model: model.to_string(),
+            api_key: api_key.map(str::to_string),
+            clear_api_key: false,
+        }
+    }
+
+    #[test]
+    fn provider_draft_accepts_camel_case_fields() {
+        let draft: ProviderDraft = serde_json::from_value(serde_json::json!({
+            "providerId": "p1",
+            "protocol": "anthropic",
+            "name": "Claude",
+            "baseUrl": "https://api.anthropic.com",
+            "model": "claude-sonnet-5-5",
+            "apiKey": "secret",
+            "clearApiKey": false
+        }))
+        .unwrap();
+
+        assert_eq!(draft.provider_id.as_deref(), Some("p1"));
+        assert_eq!(draft.protocol, config::ProviderProtocol::Anthropic);
+        assert_eq!(draft.base_url, "https://api.anthropic.com");
+        assert_eq!(draft.api_key.as_deref(), Some("secret"));
+        assert!(!draft.clear_api_key);
+    }
+
     #[test]
     fn first_provider_becomes_active() {
         let mut settings = config::AppConfig::default();
 
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
 
@@ -665,30 +927,47 @@ mod tests {
     }
 
     #[test]
+    fn saving_a_provider_keeps_its_protocol() {
+        let mut settings = config::AppConfig::default();
+        let mut claude = draft(
+            "Claude",
+            "https://api.anthropic.com",
+            "claude-sonnet-5-5",
+            None,
+        );
+        claude.protocol = config::ProviderProtocol::Anthropic;
+
+        upsert_provider(&mut settings, &claude).unwrap();
+
+        assert_eq!(
+            settings.providers[0].protocol,
+            config::ProviderProtocol::Anthropic
+        );
+    }
+
+    #[test]
     fn updating_with_a_blank_key_keeps_the_stored_key() {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
         let id = settings.providers[0].id.clone();
 
-        upsert_provider(
-            &mut settings,
-            Some(id.as_str()),
+        let mut update = draft(
             "Renamed",
             "https://api.example.com/v1",
             "example-model",
             None,
-            false,
-        )
-        .unwrap();
+        );
+        update.provider_id = Some(id);
+        upsert_provider(&mut settings, &update).unwrap();
 
         assert_eq!(settings.providers[0].name, "Renamed");
         assert_eq!(settings.providers[0].base_url, "https://api.example.com/v1");
@@ -700,26 +979,20 @@ mod tests {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            Some("secret"),
-            false,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
         )
         .unwrap();
         let id = settings.providers[0].id.clone();
 
-        upsert_provider(
-            &mut settings,
-            Some(id.as_str()),
-            "OpenAI",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            None,
-            true,
-        )
-        .unwrap();
+        let mut update = draft("OpenAI", "https://api.openai.com/v1", "gpt-4o", None);
+        update.provider_id = Some(id);
+        update.clear_api_key = true;
+        upsert_provider(&mut settings, &update).unwrap();
 
         assert!(settings.providers[0].api_key.is_none());
     }
@@ -729,24 +1002,14 @@ mod tests {
         let mut settings = config::AppConfig::default();
         upsert_provider(
             &mut settings,
-            None,
-            "First",
-            "https://api.openai.com/v1",
-            "gpt-4o",
-            None,
-            false,
+            &draft("First", "https://api.openai.com/v1", "gpt-4o", None),
         )
         .unwrap();
         let first_id = settings.providers[0].id.clone();
 
         upsert_provider(
             &mut settings,
-            None,
-            "Second",
-            "https://api.example.org/v1",
-            "other-model",
-            None,
-            false,
+            &draft("Second", "https://api.example.org/v1", "other-model", None),
         )
         .unwrap();
 
@@ -761,16 +1024,27 @@ mod tests {
     fn updating_an_unknown_provider_fails() {
         let mut settings = config::AppConfig::default();
 
-        assert!(upsert_provider(
-            &mut settings,
-            Some("missing"),
-            "Name",
-            "https://api.example.com/v1",
-            "model",
-            None,
-            false,
-        )
-        .is_err());
+        let mut update = draft("Name", "https://api.example.com/v1", "model", None);
+        update.provider_id = Some("missing".to_string());
+
+        assert!(upsert_provider(&mut settings, &update).is_err());
         assert!(settings.providers.is_empty());
+    }
+
+    #[test]
+    fn exported_packages_get_the_cowpkg_extension() {
+        assert_eq!(
+            package_output_path("backup").unwrap(),
+            PathBuf::from("backup.cowpkg")
+        );
+        assert_eq!(
+            package_output_path("backup.COWPKG").unwrap(),
+            PathBuf::from("backup.COWPKG")
+        );
+        assert_eq!(
+            package_output_path("backup.zip").unwrap(),
+            PathBuf::from("backup.cowpkg")
+        );
+        assert!(package_output_path("   ").is_err());
     }
 }

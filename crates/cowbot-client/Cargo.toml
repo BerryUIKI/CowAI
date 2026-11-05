@@ -11,6 +11,7 @@ cowbot-bus = { workspace = true }
 cowbot-store = { workspace = true }
 cowbot-service = { workspace = true }
 cowbot-agent = { workspace = true }
+cowbot-package = { workspace = true }
 tokio = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
@@ -21,3 +22,4 @@ tokio = { workspace = true }
 serde_json = { workspace = true }
 cowbot-llm = { workspace = true }
 cowbot-tools = { workspace = true }
+tempfile = "3"
