@@ -8,6 +8,12 @@ databases without sharing state. On first launch after the CowBot rename, an
 existing `cowai.db` from the previous `com.cowai.desktop` directory is copied
 into the new app-data directory automatically.
 
+On first launch, a three-step setup guide introduces the local workspace, lets
+the user connect a model provider, and adds a starter team from a built-in
+template. It can be skipped at any point; completion is recorded in the same
+`config.json`, and a configuration written before onboarding existed is treated
+as completed so upgrades do not show the guide again.
+
 The current UI has four views: **Channels** (channels and live messages),
 **Tasks** (create tasks, inspect assignment/run history, cancel, and run a crew
 on a submitted task), **Approvals** (approve or reject tool calls requested by

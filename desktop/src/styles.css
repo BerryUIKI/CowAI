@@ -1286,6 +1286,129 @@ button {
   color: var(--paper);
 }
 
+/* Onboarding */
+
+.onboarding {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: var(--ink);
+  overflow-y: auto;
+}
+
+.onboarding-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 32px;
+}
+
+.onboarding-main {
+  display: flex;
+  flex: 1;
+  justify-content: center;
+  padding: 16px 32px 56px;
+}
+
+.onboarding-panel {
+  width: min(760px, 100%);
+}
+
+.onboarding-icon-tile {
+  margin-bottom: 22px;
+}
+
+.onboarding-kicker {
+  margin: 0 0 10px;
+  color: var(--brass);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.onboarding-title {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+}
+
+.onboarding-copy {
+  max-width: 620px;
+  margin: 12px 0 0;
+  color: var(--paper-dim);
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.onboarding-points {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--paper-dim);
+  font-size: 14px;
+}
+
+.onboarding-points li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.onboarding-points li::before {
+  content: "";
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--brass);
+}
+
+.onboarding-provider,
+.onboarding-templates {
+  margin-top: 20px;
+}
+
+.onboarding-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+
+.onboarding-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 36px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
+.onboarding-dots {
+  display: flex;
+  gap: 6px;
+}
+
+.onboarding-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--rule-strong);
+}
+
+.onboarding-dot.is-active {
+  background: var(--brass);
+}
+
 .agent-avatar {
   display: grid;
   flex: none;
@@ -1502,6 +1625,18 @@ button {
 
   .settings-form-row {
     grid-template-columns: 1fr;
+  }
+
+  .onboarding-header {
+    padding: 16px 20px;
+  }
+
+  .onboarding-main {
+    padding: 8px 20px 40px;
+  }
+
+  .onboarding-title {
+    font-size: 28px;
   }
 
   .inline-form {

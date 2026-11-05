@@ -12,6 +12,7 @@ import type {
   ClientSession,
   CowEvent,
   ModelSettings,
+  OnboardingState,
   Run,
   Task,
   TemplateDocument,
@@ -158,4 +159,12 @@ export function testModelProvider(input: {
     model: input.model,
     apiKey: input.apiKey.trim() ? input.apiKey : null,
   });
+}
+
+export function getOnboardingState(): Promise<OnboardingState> {
+  return invoke<OnboardingState>("get_onboarding_state");
+}
+
+export function completeOnboarding(): Promise<OnboardingState> {
+  return invoke<OnboardingState>("complete_onboarding");
 }

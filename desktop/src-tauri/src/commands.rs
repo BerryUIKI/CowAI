@@ -518,6 +518,33 @@ pub fn activate_model_provider(
     Ok(model_settings(&state, &config))
 }
 
+/// First-run onboarding state for the desktop.
+#[derive(Debug, Clone, Serialize)]
+pub struct OnboardingState {
+    pub completed: bool,
+}
+
+fn onboarding_state(config: &config::AppConfig) -> OnboardingState {
+    OnboardingState {
+        completed: config.onboarding_completed,
+    }
+}
+
+#[tauri::command]
+pub fn get_onboarding_state(state: State<'_, AppState>) -> Result<OnboardingState, String> {
+    let config = load_config(&state)?;
+    Ok(onboarding_state(&config))
+}
+
+/// Mark the guided first-run setup as completed or skipped.
+#[tauri::command]
+pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState, String> {
+    let mut config = load_config(&state)?;
+    config.onboarding_completed = true;
+    let config = persist_config(&state, config)?;
+    Ok(onboarding_state(&config))
+}
+
 /// Send a minimal completion with the drafted provider settings.
 ///
 /// A blank API key falls back to the key stored for `provider_id`, so a saved
