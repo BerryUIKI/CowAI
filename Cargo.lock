@@ -329,11 +329,13 @@ dependencies = [
  "cowbot-bus",
  "cowbot-core",
  "cowbot-llm",
+ "cowbot-package",
  "cowbot-service",
  "cowbot-store",
  "cowbot-tools",
  "serde",
  "serde_json",
+ "tempfile",
  "tokio",
  "tracing",
 ]

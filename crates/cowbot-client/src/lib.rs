@@ -22,6 +22,7 @@ use tokio::sync::mpsc;
 
 mod local;
 
+pub use cowbot_package::MAX_PACKAGE_BYTES;
 pub use local::LocalClient;
 
 /// User identity as seen by the client.
@@ -40,6 +41,19 @@ pub struct ClientUser {
 pub struct ClientSession {
     pub user: ClientUser,
     pub workspace: Workspace,
+}
+
+/// Summary of a workspace imported from a `.cowpkg` package.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceImport {
+    pub workspace_id: String,
+    pub workspace_name: String,
+    pub channels: usize,
+    pub messages: usize,
+    pub agents: usize,
+    pub tasks: usize,
+    pub runs: usize,
+    pub audit_events: usize,
 }
 
 /// Parameters for creating a task and its root assignment.

@@ -200,6 +200,13 @@ export interface OnboardingState {
   completed: boolean;
 }
 
+export interface WorkspaceSummary {
+  database: string;
+  name: string;
+  active: boolean;
+  available: boolean;
+}
+
 const taskStatusLabels = {
   pending: "Pending",
   in_progress: "In progress",

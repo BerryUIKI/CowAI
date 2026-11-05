@@ -4,13 +4,15 @@ use cowbot_core::agent::{AgentId, AgentProfile};
 use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
 use cowbot_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
 use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
+use cowbot_core::identity::WorkspaceId;
 use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_llm::{ChatCompletionRequest, ChatMessage};
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tauri::{Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::{config, AppState};
 
@@ -549,6 +551,178 @@ pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState
     Ok(onboarding_state(&config))
 }
 
+/// One workspace database offered by the desktop switcher.
+#[derive(Debug, Clone, Serialize)]
+pub struct WorkspaceView {
+    pub database: String,
+    pub name: String,
+    pub active: bool,
+    pub available: bool,
+}
+
+fn ensure_no_running_tasks(state: &AppState) -> Result<(), String> {
+    let running = state
+        .running
+        .lock()
+        .map_err(|_| "task state lock was poisoned".to_string())?;
+    if running.is_empty() {
+        Ok(())
+    } else {
+        Err("Wait for running tasks to finish before changing workspaces.".to_string())
+    }
+}
+
+#[tauri::command]
+pub fn list_workspaces(state: State<'_, AppState>) -> Result<Vec<WorkspaceView>, String> {
+    let config = load_config(&state)?;
+    let active = config
+        .active_workspace_database
+        .clone()
+        .unwrap_or_else(|| config::DEFAULT_DATABASE.to_string());
+
+    Ok(config
+        .workspaces
+        .iter()
+        .map(|entry| WorkspaceView {
+            database: entry.database.clone(),
+            name: entry.name.clone(),
+            active: entry.database == active,
+            available: config::resolve_database_path(&state.data_dir, &entry.database)
+                .map(|path| path.exists())
+                .unwrap_or(false),
+        })
+        .collect())
+}
+
+/// Switch to another local workspace database and restart the app.
+#[tauri::command]
+pub fn switch_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    database: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+    let path = config::resolve_database_path(&state.data_dir, &database)?;
+    if !path.exists() {
+        return Err("Workspace database was not found.".to_string());
+    }
+
+    let mut config = load_config(&state)?;
+    config.active_workspace_database = Some(database);
+    config::save(&state.config_path, &config)
+        .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))?;
+
+    app.restart();
+}
+
+/// Append the package extension when the save dialog returns a bare name.
+fn package_output_path(raw: &str) -> Result<PathBuf, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Choose where to save the package.".to_string());
+    }
+
+    let mut path = PathBuf::from(trimmed);
+    let has_extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.eq_ignore_ascii_case("cowpkg"))
+        .unwrap_or(false);
+    if !has_extension {
+        path.set_extension("cowpkg");
+    }
+    Ok(path)
+}
+
+fn remove_database_files(path: &Path) {
+    for suffix in ["", "-wal", "-shm"] {
+        let _ = std::fs::remove_file(format!("{}{suffix}", path.display()));
+    }
+}
+
+/// Export the current workspace as a `.cowpkg` package.
+#[tauri::command]
+pub async fn export_workspace(state: State<'_, AppState>, path: String) -> Result<String, String> {
+    let path = package_output_path(&path)?;
+    let bytes = state
+        .client
+        .export_workspace()
+        .await
+        .map_err(|error| error.to_string())?;
+
+    let temporary = path.with_extension("cowpkg.tmp");
+    std::fs::write(&temporary, &bytes)
+        .map_err(|error| format!("failed to write {}: {error}", temporary.display()))?;
+    if path.exists() {
+        std::fs::remove_file(&path)
+            .map_err(|error| format!("failed to replace {}: {error}", path.display()))?;
+    }
+    if let Err(error) = std::fs::rename(&temporary, &path) {
+        let _ = std::fs::remove_file(&temporary);
+        return Err(format!("failed to write {}: {error}", path.display()));
+    }
+
+    Ok(path.display().to_string())
+}
+
+/// Import a `.cowpkg` package as a new workspace database and restart.
+#[tauri::command]
+pub async fn import_workspace(
+    state: State<'_, AppState>,
+    app: AppHandle,
+    path: String,
+) -> Result<(), String> {
+    ensure_no_running_tasks(&state)?;
+
+    let source = PathBuf::from(path.trim());
+    if source.as_os_str().is_empty() {
+        return Err("Choose a package to import.".to_string());
+    }
+    let metadata = std::fs::metadata(&source)
+        .map_err(|error| format!("failed to read {}: {error}", source.display()))?;
+    if metadata.len() > cowbot_client::MAX_PACKAGE_BYTES {
+        return Err(format!(
+            "The package is larger than {} MB.",
+            cowbot_client::MAX_PACKAGE_BYTES / (1024 * 1024)
+        ));
+    }
+    let bytes = std::fs::read(&source)
+        .map_err(|error| format!("failed to read {}: {error}", source.display()))?;
+
+    let database = format!("{}/{}.db", config::WORKSPACES_DIR, WorkspaceId::random().0);
+    let database_path = config::resolve_database_path(&state.data_dir, &database)?;
+    if let Some(parent) = database_path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;
+    }
+
+    let (client, summary) =
+        match cowbot_client::LocalClient::create_from_package(&database_path, &bytes).await {
+            Ok(result) => result,
+            Err(error) => {
+                remove_database_files(&database_path);
+                return Err(error.to_string());
+            }
+        };
+    drop(client);
+
+    let mut config = load_config(&state)?;
+    config.workspaces.push(config::WorkspaceEntry {
+        database: database.clone(),
+        name: summary.workspace_name,
+    });
+    config.active_workspace_database = Some(database);
+    if let Err(error) = config::save(&state.config_path, &config) {
+        remove_database_files(&database_path);
+        return Err(format!(
+            "failed to write {}: {error}",
+            state.config_path.display()
+        ));
+    }
+
+    app.restart();
+}
+
 /// Send a minimal completion with the drafted provider settings.
 ///
 /// A blank API key falls back to the key stored for `provider_id`, so a saved
@@ -804,5 +978,22 @@ mod tests {
 
         assert!(upsert_provider(&mut settings, &update).is_err());
         assert!(settings.providers.is_empty());
+    }
+
+    #[test]
+    fn exported_packages_get_the_cowpkg_extension() {
+        assert_eq!(
+            package_output_path("backup").unwrap(),
+            PathBuf::from("backup.cowpkg")
+        );
+        assert_eq!(
+            package_output_path("backup.COWPKG").unwrap(),
+            PathBuf::from("backup.COWPKG")
+        );
+        assert_eq!(
+            package_output_path("backup.zip").unwrap(),
+            PathBuf::from("backup.cowpkg")
+        );
+        assert!(package_output_path("   ").is_err());
     }
 }
