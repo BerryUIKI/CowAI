@@ -74,7 +74,7 @@ The [release workflow](../.github/workflows/release.yml) builds installers on ma
 - **macOS:** universal `.dmg` for Apple Silicon and Intel
 - **Linux:** `.deb` and `.AppImage`
 
-Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.0` for `0.1.0`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
+Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.1` for `0.1.1`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
 
 Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. Signing, notarization, and auto-updates are follow-up work (ADR-0014).
 
