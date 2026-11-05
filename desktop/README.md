@@ -8,10 +8,17 @@ databases without sharing state. On first launch after the CowBot rename, an
 existing `cowai.db` from the previous `com.cowai.desktop` directory is copied
 into the new app-data directory automatically.
 
-The current UI has three views: **Channels** (channels and live messages),
-**Tasks** (create tasks, inspect assignment/run history, cancel), and
-**Approvals** (approve or reject tool calls requested by running agents).
-Starting task execution from the desktop is a follow-up slice.
+The current UI has four views: **Channels** (channels and live messages),
+**Tasks** (create tasks, inspect assignment/run history, cancel, and run a crew
+on a submitted task), **Approvals** (approve or reject tool calls requested by
+running agents), and **Settings** (model providers, agents, and templates).
+
+Model providers are OpenAI-compatible endpoints kept in `config.json` under the
+same app-data directory as `cowbot.db`. The Settings view can add, edit, test,
+and switch providers; the active one is used by the next crew run, and no
+active provider means the offline mock model. API keys are stored in plain text
+in that file and are never sent back to the frontend. Environment variables do
+not configure the desktop (the CLI keeps its flags and environment variables).
 
 ## Prerequisites
 
@@ -40,6 +47,8 @@ npm run tauri build              # produce platform bundles
 
 ```bash
 npm run build
+cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+cargo test --manifest-path src-tauri/Cargo.toml
 cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings
 ```
 

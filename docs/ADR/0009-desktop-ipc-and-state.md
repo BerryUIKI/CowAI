@@ -3,6 +3,7 @@
 - **Status**: Accepted
 - **Date**: 2026-11-04
 - **Related**: `docs/ADR/0001-runtime-and-deployment.md`, `docs/ADR/0007-client-api.md`, `docs/ARCHITECTURE.md` §3.9
+- **Superseded in part**: [0012](0012-local-model-configuration.md) replaces the provider-selection paragraph in §6; the desktop now reads providers from its local `config.json` instead of the environment.
 
 ## Context
 
