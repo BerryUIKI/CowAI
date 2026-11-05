@@ -1,6 +1,6 @@
 # ADR 0004: Import/Export Package Format
 
-- **Status**: Accepted
+- **Status**: Accepted; v1 implemented in `cowbot-package` (workspace kind)
 - **Date**: 2026-11-03
 - **Related**: `docs/PRD.md` §7.1, `docs/ARCHITECTURE.md` §4.3
 
@@ -52,6 +52,9 @@ Local and team modes keep independent data, and v1 migrates between them through
 - Model and tool credentials must be reconfigured after import;
 - Future merge/sync support would require ID mapping and conflict resolution;
 - The package format needs versioned documentation and compatibility tests.
+
+See [PACKAGE_FORMAT.md](../PACKAGE_FORMAT.md) for the concrete v1 layout. Only the
+`workspace` kind is implemented; `template` and `task-archive` remain.
 
 ## Alternatives
 

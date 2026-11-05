@@ -6,7 +6,7 @@
 
 ## Context
 
-CowAI needs built-in agent and team templates while allowing users to customize and share them. Templates must work offline and must not become an entry point for code execution or supply-chain attacks.
+CowBot needs built-in agent and team templates while allowing users to customize and share them. Templates must work offline and must not become an entry point for code execution or supply-chain attacks.
 
 ## Decision
 

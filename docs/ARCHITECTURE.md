@@ -1,4 +1,4 @@
-# CowAI Functional and System Architecture (Draft)
+# CowBot Functional and System Architecture (Draft)
 
 > **Status**: Draft v0.1 (to be confirmed section by section)
 > **Date**: 2026-11-03
@@ -10,7 +10,7 @@
 
 1. **One core, multiple runtime forms**: desktop and server share the same Rust domain model and business logic.
 2. **Local-first, multi-user-ready**: the platform works without a server by default, yet accounts, workspaces, and permissions exist from v1.
-3. **API-first**: the desktop app, CLI, and future integrations all access capabilities through `cow-client` or HTTP + WebSocket.
+3. **API-first**: the desktop app, CLI, and future integrations all access capabilities through `cowbot-client` or HTTP + WebSocket.
 4. **Event-driven**: messages, task state, tool calls, and approvals are broadcast over the event bus for real-time UI and auditing.
 5. **Configuration over hard-coding**: roles, tools, templates, and approval policies are configurable; software engineering is not baked in.
 6. **Secure by default**: risky operations require approval; the sandbox restricts working directories, timeouts, and output size.
@@ -24,28 +24,28 @@
 +---------------------------- Desktop (Tauri) -----------------------------+
 |  Web frontend (channels / tasks / agents / approvals / settings)        |
 |        | Tauri IPC / HTTP                                               |
-|  cow-client --+-- Local mode: in-process cow-* core + SQLite            |
-|               +-- Team mode: HTTP/WebSocket -> cow-server               |
+|  cowbot-client --+-- Local mode: in-process cowbot-* core + SQLite      |
+|               +-- Team mode: HTTP/WebSocket -> cowbot-server            |
 +-------------------------------------------------------------------------+
 
 +---------------------------- Self-hosted server --------------------------+
-|  cow-server (HTTP + WebSocket API, auth, workspaces, permissions)       |
+|  cowbot-server (HTTP + WebSocket API, auth, workspaces, permissions)    |
 |        |                                                                |
-|  cow-agent / cow-tools / cow-llm / cow-bus / cow-store                  |
+|  cowbot-agent / cowbot-tools / cowbot-llm / cowbot-bus / cowbot-store   |
 |        |                                                                |
 |  SQLite (default) or PostgreSQL (P1)                                    |
 +-------------------------------------------------------------------------+
 
-CLI (cowai) -- cow-client -- local mode or remote server
+CLI (cowbot) -- cowbot-client -- local mode or remote server
 ```
 
-- The desktop app runs in local mode by default and needs no server; switching to team mode only changes the `cow-client` implementation and connection settings.
+- The desktop app runs in local mode by default and needs no server; switching to team mode only changes the `cowbot-client` implementation and connection settings.
 - The server supports multiple users from v1; local mode auto-creates a single-user workspace, but the data model matches the server.
 
 ### 2.1 Implementation Order
 
 1. **Local/offline first**: desktop app + core + SQLite + templates + approvals + tool sandbox.
-2. **Self-hosted team mode**: `cow-server`, multi-user accounts, invitations, API tokens, remote client.
+2. **Self-hosted team mode**: `cowbot-server`, multi-user accounts, invitations, API tokens, remote client.
 3. **Extensions**: Docker sandbox, IM/Webhooks, long-term memory, PostgreSQL, template marketplace.
 
 ---
@@ -65,6 +65,7 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Humans and agents are both channel members; messages are persisted and shown on a timeline.
 - `@Agent` mentions or task cards trigger tasks; agent reasoning, tool calls, approvals, and deliverables are written back to the channel.
 - Channels are the primary collaboration surface but do not restrict usage: users can create channels and threads freely.
+- `cowbot-service` provides the local bootstrap (idempotent owner and default workspace) and channel/message services that persist writes before publishing `ChannelCreated` and `MessagePosted` events.
 
 ### 3.3 Agents and Templates
 
@@ -73,13 +74,18 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Templates can be customized, imported, and exported; they are a starting point, not a fixed scenario.
 - Template format is JSON (`schema_version` / `kind` / `agents` / `tasks`); built-in templates are compiled into the binary, user templates are stored in SQLite, and exports use `.cowtemplate`.
 - Templates only reference tool names and model configuration; they never embed executable code. v1 has no online template marketplace.
+- `cowbot-service::TemplateService` loads the compiled-in templates, validates documents (schema version, references, cycles), persists user templates, and imports/exports `.cowtemplate` files. Template format details live in `docs/TEMPLATE_FORMAT.md`.
 
 ### 3.4 Tasks and Orchestration
 
-- Task lifecycle: `Pending -> Assigned -> Running -> WaitingApproval -> Completed / Failed / Cancelled`.
-- v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`).
-- Later: hierarchical orchestration (manager agent delegation) and DAG workflows.
+- Phase 1.4 introduces an assignment runtime (ADR-0006): each unit of agent work is an assignment record with `root_id` / `parent_id` / `depth`, origin, requester, assignee, mode, reply, status, execution/restart counters, and approval level.
+- Assignment lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes an append-only event in the same transaction.
+- Task status is a projection of the root assignment lifecycle: `pending -> in_progress -> completed / failed / cancelled`. It is updated in the same service calls as the assignment transition.
+- v1 scope (confirmed): single-agent tasks plus sequential crew (`ProcessType::Sequential`) on top of assignments; per-root request/execution/wake budgets; stall guard; restart reconciliation.
+- Implementation status (Phase 1.4): the lifecycle, event log, stall guard, restart reconciliation, and budget checks are wired into `cowbot-service`. `AssignmentService` enforces the request budget in `enqueue_child`, the execution budget in `start`, and the wake budget in `wake_parent`; the sequential crew runner only exercises the execution budget because it neither delegates nor wakes parents, and no wake/re-entry scheduler exists yet. The crew runner records one `Run` per task attempt with `Completed` or `Failed` status and one `ToolCallRecord` per executed tool call, including denied calls.
+- Later: hierarchical orchestration (manager agent delegation), DAG workflows, and a background wake scheduler.
 - Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
+- Phase 1.4 stores the effective approval level on the assignment; inheritance (`max(own, inherited)`) and enforcement are implemented in Phase 1.5.
 
 ### 3.5 Tools and Sandbox
 
@@ -87,6 +93,8 @@ CLI (cowai) -- cow-client -- local mode or remote server
 - Built-in tools: code execution, file read, file write; later: network access, retrieval, browser, and more.
 - `SandboxBackend`: local subprocess in v1; Docker in P1; WASM evaluated in P2.
 - Resource limits: timeout, output truncation, working-directory restriction, environment-variable filtering.
+- Static risk classifier (`StaticRiskClassifier`): grades every tool call as `ReadOnly`, `Low`, `Medium`, `High`, or `Critical` using deterministic rules; unknown tools default to `High`.
+- Approval gate: `ToolGate` is consulted before every tool execution. `cowbot-service::ApprovalService` applies the assignment's approval level, creates a pending approval when required, waits for a human decision, and records audit events. Only one decision is accepted per approval: `decide_approval` updates pending rows exclusively, so concurrent reviewers cannot overwrite each other. When the wait times out the approval is persisted as `expired` and the tool call is denied. Approvals left pending by a previous process are expired on startup by `ApprovalService::reconcile_on_startup`.
 
 ### 3.6 Model Gateway
 
@@ -103,14 +111,16 @@ CLI (cowai) -- cow-client -- local mode or remote server
 ### 3.8 Persistence and Audit
 
 - `CowStore` abstraction; v1 implements SQLite (WAL); PostgreSQL is deferred to the server phase (P1).
-- Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, runs, tool calls, approvals, and audit events.
-- Audit events record who approved or rejected what, and which tools an agent executed.
+- Stored entities: users, workspaces, members, channels, messages, agents, templates, tasks, assignments, assignment events, runs, tool calls, approvals, and audit events.
+- The crew runner records a `Run` per task attempt and a `ToolCallRecord` per tool call, including its arguments, result, and — for human-approved calls — the deciding actor in `tool_calls.approved_by`, so the desktop UI can read per-run tool history.
+- Audit events record who approved or rejected what, and which tools an agent executed. Approval decisions are audited with tool name, call ID, risk level, matched rule, and arguments. Expired approvals are persisted with status `expired` so stale approval cards cannot reappear after a restart; the startup sweep covers rows left behind when the waiting process died.
 
 ### 3.9 Access Layer
 
-- **Desktop UI**: Tauri web frontend for channels, tasks, agents, approvals, and settings.
-- **HTTP/WebSocket API**: `cow-server` serves desktop team mode, the CLI, and a future browser entry point.
-- **CLI**: `cowai` for initialization, diagnostics, headless runs, and debugging.
+- **Client abstraction**: `cowbot-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
+- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and settings for agents, templates, and model providers. Providers are OpenAI-compatible endpoints stored in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012), and onboarding records its completion in the same file (ADR-0013). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
+- **HTTP/WebSocket API**: `cowbot-server` serves desktop team mode, the CLI, and a future browser entry point.
+- **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace, `run` executes the sequential crew through the assignment runtime with persisted history and interactive approval prompts. Channel collaboration and template-driven crews are not wired into the CLI yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
 
 ---
@@ -120,11 +130,11 @@ CLI (cowai) -- cow-client -- local mode or remote server
 ### 4.1 From Channel to Deliverable
 
 1. A user `@Agent`s, creates a task card, or starts a task from a team template in a channel.
-2. The orchestrator creates the task and assigns agents (sequential in v1).
+2. The orchestrator creates an assignment (root/parent, requester, assignee) and dispatches it (sequential in v1).
 3. An agent calls the LLM and produces text or tool-call requests.
 4. The approval policy decides: auto-approve or create an approval card.
 5. Tools execute in the sandbox; results are written back to the channel and task context.
-6. The task completes; deliverables, run records, and audit events are persisted.
+6. The task completes; deliverables, assignment events, and audit records are persisted.
 
 ### 4.2 Approval Policy (Multiple Modes)
 
@@ -132,12 +142,13 @@ Inspired by Claude Code's permission modes:
 
 | Mode | Behavior |
 | --- | --- |
-| **Ask (default)** | Every sensitive tool call requires approval; approve once, for this session, or always |
-| **SafeAuto** | Read-only/safe operations auto-approve; writes/executions still require approval |
-| **PlanOnly** | Agents may plan and investigate read-only, but cannot write |
-| **Trusted** | Auto-approve within a trusted workspace (admin-enabled), with auditing retained |
+| **Ask (default)** | ReadOnly auto-approves; Low and above require approval; Critical is denied |
+| **SafeAuto** | ReadOnly/Low auto-approve; Medium and above require approval; Critical is denied |
+| **PlanOnly** | Only ReadOnly is allowed; writes and executions are denied |
+| **Trusted** | Everything except Critical auto-approves; Critical remains denied in v1 |
 
 - Rule priority: workspace policy > agent policy > global default.
+- Assignment inheritance: delegated work uses `inherit_approval_level(parent, requested)`; `PlanOnly` is a hard read-only boundary, otherwise the more permissive level wins (ADR-0006, implemented in Phase 1.5).
 - Fine-grained rules: per tool, command prefix, path allowlist/denylist.
 - Risk levels: `ReadOnly` / `Low` / `Medium` / `High` / `Critical`.
 - Decision order: static rules first (tool, command pattern, path, network, destructive operations); an optional LLM classifier may handle unmatched operations and can only raise risk, never lower the static floor; undecidable operations default to `High`.
@@ -146,8 +157,8 @@ Inspired by Claude Code's permission modes:
 ### 4.3 Local Mode vs. Team Mode
 
 - **Local mode**: single user, in-process core, SQLite; no network or server required.
-- **Team mode**: multi-user, remote `cow-server`, shared workspaces; the desktop app only renders and interacts.
-- Both modes share the domain model and UI; differences are encapsulated in `cow-client` and the auth layer.
+- **Team mode**: multi-user, remote `cowbot-server`, shared workspaces; the desktop app only renders and interacts.
+- Both modes share the domain model and UI; differences are encapsulated in `cowbot-client` and the auth layer.
 - **Data exchange (v1)**: the two modes keep independent data and migrate via import/export (workspace packages, template packages, task archives); no bidirectional sync.
 
 ---
@@ -167,12 +178,14 @@ Inspired by Claude Code's permission modes:
 | `AgentProfile` | id, workspace_id, name, role, goal, backstory, model, tools, limits |
 | `Template` | id, kind (agent/team), name, payload |
 | `Task` | id, workspace_id, channel_id, description, expected_output, assignee, status, context_tasks |
+| `Assignment` | id, root_id, parent_id, depth, task_id, origin, requester, assignee, mode, reply, status, executions, restarts, approval_level, created_at, updated_at |
+| `AssignmentEvent` | id, assignment_id, kind, detail, created_at |
 | `Run` | id, task_id, agent_id, status, started_at, finished_at |
 | `ToolCall` | id, run_id, tool_name, arguments, result, approved_by |
-| `Approval` | id, task_id, tool_call_id, status, decided_by, decided_at |
+| `Approval` | id, task_id, tool_call_id, status (`pending` / `approved` / `rejected` / `expired`), decided_by, decided_at |
 | `AuditEvent` | id, workspace_id, actor, action, target, created_at |
 
-> Final field definitions will follow the `cow-store` migrations.
+> Final field definitions will follow the `cowbot-store` migrations.
 
 ---
 
@@ -180,17 +193,19 @@ Inspired by Claude Code's permission modes:
 
 | Crate | Responsibility | Status |
 | --- | --- | --- |
-| `cow-core` | Domain model, errors, events, `Tool` trait | Existing |
-| `cow-bus` | Event bus and subscriptions | Existing |
-| `cow-tools` | Tool registry and sandbox backends | Existing (subprocess) |
-| `cow-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
-| `cow-agent` | Agent loop and crew orchestration | Existing (sequential) |
-| `cow-cli` | `cowai` CLI | Existing |
-| `cow-store` | Persistence abstraction and SQLite/Postgres implementations | Planned |
-| `cow-server` | HTTP/WebSocket API, auth, multi-user | Planned |
-| `cow-client` | Unified local/remote client abstraction | Planned |
-| `cow-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
-| `cow-desktop` | Tauri shell and frontend integration | Planned |
+| `cowbot-core` | Domain model, errors, events, `Tool` trait | Existing |
+| `cowbot-bus` | Event bus and subscriptions | Existing |
+| `cowbot-tools` | Tool registry, sandbox backends, and static risk classification | Existing (subprocess) |
+| `cowbot-llm` | Model providers and types | Existing (OpenAI-compatible + Mock) |
+| `cowbot-agent` | Agent loop and crew orchestration | Existing (sequential) |
+| `cowbot-cli` | `cowbot` CLI | Existing (standalone; not yet wired to `cowbot-service`) |
+| `cowbot-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
+| `cowbot-service` | Local bootstrap, channel/message services, assignment runtime, approval service, sequential crew runner, template management, and event wiring | Existing |
+| `cowbot-server` | HTTP/WebSocket API, auth, multi-user | Planned |
+| `cowbot-client` | Unified local/remote client abstraction | Existing (local mode) |
+| `desktop/` | Tauri v2 shell + React/TypeScript frontend | Existing (channels and messages) |
+| `cowbot-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
+| `cowbot-desktop` | Tauri shell and frontend integration | Planned |
 | Frontend app | React + TypeScript (channels, tasks, approvals, agent management UI) | Planned |
 
 ---
@@ -235,3 +250,9 @@ Inspired by Claude Code's permission modes:
 2. Online template marketplace and template signing (P2).
 3. TLS termination and reverse-proxy deployment details.
 4. Invitation and notification channels (email / IM).
+
+---
+
+## 10. Design References
+
+External projects and the patterns CowBot adopts, defers, or rejects are recorded in `docs/REFERENCES.md` (CrewAI, Mattermost, and OpenMausBot). The most immediate candidate is a simplified assignment runtime for Phase 1.4, described there.

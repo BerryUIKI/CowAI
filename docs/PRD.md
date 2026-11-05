@@ -1,4 +1,4 @@
-# CowAI Product Requirements Document (PRD)
+# CowBot Product Requirements Document (PRD)
 
 > **Status**: Draft v0.1
 > **Date**: 2026-11-03
@@ -21,7 +21,7 @@ At the same time, more individual developers and small teams want to:
 - have multiple agents collaborate like colleagues rather than calling them as one-shot functions;
 - start with software development, but later extend to research, writing, data analysis, and other general work.
 
-CowAI fills exactly this gap: **a self-hosted, channel-native multi-agent team platform.**
+CowBot fills exactly this gap: **a self-hosted, channel-native multi-agent team platform.**
 
 ---
 
@@ -29,7 +29,7 @@ CowAI fills exactly this gap: **a self-hosted, channel-native multi-agent team p
 
 ### 2.1 One-Sentence Positioning
 
-> CowAI is a self-hosted, channel-native multi-agent team platform that lets individuals and small teams direct their AI colleagues the way they would lead a team — starting with software development, but not limited to it.
+> CowBot is a self-hosted, channel-native multi-agent team platform that lets individuals and small teams direct their AI colleagues the way they would lead a team — starting with software development, but not limited to it.
 
 ### 2.2 Target Users
 
@@ -64,7 +64,7 @@ CowAI fills exactly this gap: **a self-hosted, channel-native multi-agent team p
 
 ### 2.5 Differentiation: Channel-Native Human-AI Collaboration
 
-CowAI's core differentiation is not "a stronger single agent", but **putting multiple agents and humans in the same collaboration space**:
+CowBot's core differentiation is not "a stronger single agent", but **putting multiple agents and humans in the same collaboration space**:
 
 - Channels and threads are the primary interface; humans and agents are both channel members.
 - Agents can be assigned via @mention or proactively claim tasks by role.
@@ -82,7 +82,7 @@ CowAI's core differentiation is not "a stronger single agent", but **putting mul
 
 ### 2.7 Deployment and Runtime Forms
 
-CowAI follows a "single core, two forms" model:
+CowBot follows a "single core, two forms" model:
 
 | Form | Description | Best For |
 | --- | --- | --- |
@@ -119,7 +119,7 @@ CowAI follows a "single core, two forms" model:
 
 ## 4. Core User Stories
 
-1. As an individual developer, I want to deploy CowAI on a private server in one step and create my first workspace in the desktop console.
+1. As an individual developer, I want to deploy CowBot on a private server in one step and create my first workspace in the desktop console.
 2. As a tech lead, I want to create planner / coder / reviewer agents and configure their models and tools.
 3. As a user, I want to submit a requirement to the agent team in a channel and see it broken down, assigned, and executed.
 4. As a user, I want agents to ask for my approval before risky operations such as deleting files or running unknown commands.
@@ -140,12 +140,12 @@ CowAI follows a "single core, two forms" model:
 | Agent template library | Built-in JSON role/team templates compiled into the app; custom templates and `.cowtemplate` import/export |
 | Collaboration space | Workspaces, channels, threads, message timeline; @Agent assignment; task cards and approval cards |
 | Agent management | Create/edit agents (role, goal, backstory, model, tools, iteration limit) |
-| Tasks and orchestration | Task creation, assignment, sequential crew execution, deliverables, and status transitions |
+| Tasks and orchestration | Task creation, assignment runtime (lifecycle, event log, budgets, restart reconciliation), sequential crew execution, deliverables, run and tool-call history, and status transitions |
 | Tools and sandbox | Code execution, file read/write; timeouts, output truncation, working-directory limits |
 | Approval policy | Modes (Ask / SafeAuto / PlanOnly / Trusted); static risk levels (ReadOnly–Critical); optional LLM classifier that can only raise risk; tool/command/path allowlists |
 | Model configuration | OpenAI-compatible endpoints (cloud APIs and local models), connection test |
 | Persistence | SQLite (WAL) for workspaces, channels, messages, tasks, agent configuration, and approval records |
-| CLI | `cowai` retained for initialization, diagnostics, headless runs, and debugging |
+| CLI | `cowbot` retained for initialization, diagnostics, headless runs, and debugging |
 
 ### 5.2 P1 (Enhancements)
 

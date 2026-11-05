@@ -1,0 +1,776 @@
+use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
+use cowbot_client::{Client, NewTask};
+use cowbot_core::agent::{AgentId, AgentProfile};
+use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
+use cowbot_core::assignment::{Assignment, AssignmentEvent, AssignmentId};
+use cowbot_core::channel::{Channel, ChannelId, ChannelMessage};
+use cowbot_core::run::{Run, RunId, ToolCallRecord};
+use cowbot_core::task::{Task, TaskId};
+use cowbot_core::template::TemplateDocument;
+use cowbot_llm::{ChatCompletionRequest, ChatMessage};
+use serde::Serialize;
+use std::time::Duration;
+use tauri::{Emitter, Manager, State};
+
+use crate::{config, AppState};
+
+/// Payload emitted on `cowbot-run-finished` when a crew run settles.
+#[derive(Debug, Clone, Serialize)]
+pub struct RunFinished {
+    pub task_id: String,
+    pub ok: bool,
+    pub error: Option<String>,
+}
+
+#[tauri::command]
+pub async fn get_session(
+    state: State<'_, AppState>,
+) -> Result<cowbot_client::ClientSession, String> {
+    state
+        .client
+        .session()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_channels(state: State<'_, AppState>) -> Result<Vec<Channel>, String> {
+    state
+        .client
+        .list_channels()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn create_channel(
+    state: State<'_, AppState>,
+    name: String,
+    topic: String,
+) -> Result<Channel, String> {
+    state
+        .client
+        .create_channel(&name, &topic)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_messages(
+    state: State<'_, AppState>,
+    channel_id: String,
+    limit: u32,
+) -> Result<Vec<ChannelMessage>, String> {
+    state
+        .client
+        .list_messages(&ChannelId::new(channel_id), limit)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn post_message(
+    state: State<'_, AppState>,
+    channel_id: String,
+    content: String,
+) -> Result<ChannelMessage, String> {
+    state
+        .client
+        .post_message(&ChannelId::new(channel_id), &content)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_agents(state: State<'_, AppState>) -> Result<Vec<AgentProfile>, String> {
+    state
+        .client
+        .list_agents()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_templates(state: State<'_, AppState>) -> Result<Vec<TemplateDocument>, String> {
+    state
+        .client
+        .list_templates()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn instantiate_agents(
+    state: State<'_, AppState>,
+    template_id: String,
+) -> Result<Vec<AgentProfile>, String> {
+    state
+        .client
+        .instantiate_agents(&template_id)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn create_task(
+    state: State<'_, AppState>,
+    description: String,
+    expected_output: String,
+    assignee: String,
+    channel_id: Option<String>,
+    approval_level: String,
+) -> Result<Task, String> {
+    let approval_level = parse_approval_level(&approval_level)?;
+    let mut task = NewTask::new(description, expected_output, AgentId::new(assignee));
+    if let Some(channel_id) = channel_id.filter(|id| !id.trim().is_empty()) {
+        task = task.in_channel(ChannelId::new(channel_id));
+    }
+    task = task.with_approval_level(approval_level);
+
+    state
+        .client
+        .create_task(&task)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn run_task(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    task_id: String,
+    approval_level: String,
+) -> Result<(), String> {
+    let approval_level = parse_approval_level(&approval_level)?;
+    let task = state
+        .client
+        .get_task(&TaskId::new(task_id.clone()))
+        .await
+        .map_err(|error| error.to_string())?
+        .ok_or_else(|| format!("task '{task_id}' was not found"))?;
+
+    {
+        let mut running = state.running.lock().map_err(|error| error.to_string())?;
+        if !running.insert(task_id.clone()) {
+            return Err(format!("task '{task_id}' is already running"));
+        }
+    }
+
+    let client = state.client.clone();
+    let (llm, model) = state.runtime_model()?;
+    let tools = state.tools.clone();
+    let run_id = task_id.clone();
+
+    tauri::async_runtime::spawn(async move {
+        let outcome = async {
+            let mut crew = build_standard_crew(&task.description, &llm, &tools, &model);
+            client.run_crew(&mut crew, approval_level).await
+        }
+        .await;
+
+        if let Some(state) = app.try_state::<AppState>() {
+            if let Ok(mut running) = state.running.lock() {
+                running.remove(&run_id);
+            }
+        }
+
+        let payload = match outcome {
+            Ok(_) => RunFinished {
+                task_id: run_id,
+                ok: true,
+                error: None,
+            },
+            Err(error) => RunFinished {
+                task_id: run_id,
+                ok: false,
+                error: Some(error.to_string()),
+            },
+        };
+        let _ = app.emit("cowbot-run-finished", payload);
+    });
+
+    Ok(())
+}
+
+/// Build the Planner/Coder/Reviewer pipeline used by the CLI, with the
+/// submitted task's description as the objective.
+fn build_standard_crew(
+    objective: &str,
+    llm: &std::sync::Arc<dyn cowbot_llm::LlmProvider>,
+    tools: &cowbot_tools::ToolRegistry,
+    model: &str,
+) -> Crew {
+    let planner_profile = StandardRoles::planner();
+    let planner_id = planner_profile.id.clone();
+    let planner = AgentInstance::new(planner_profile, llm.clone(), tools.clone(), model);
+
+    let coder_profile = StandardRoles::coder();
+    let coder_id = coder_profile.id.clone();
+    let coder = AgentInstance::new(coder_profile, llm.clone(), tools.clone(), model);
+
+    let reviewer_profile = StandardRoles::reviewer();
+    let reviewer_id = reviewer_profile.id.clone();
+    let reviewer = AgentInstance::new(reviewer_profile, llm.clone(), tools.clone(), model);
+
+    let mut crew = Crew::new(ProcessType::Sequential);
+    crew.add_agent(planner);
+    crew.add_agent(coder);
+    crew.add_agent(reviewer);
+
+    let plan_task = Task::new(
+        format!("Analyze objective and formulate architecture plan: {objective}"),
+        "A clear, step-by-step implementation and verification plan.",
+    )
+    .assign_to(planner_id);
+    let plan_id = plan_task.id.clone();
+
+    let code_task = Task::new(
+        "Execute code implementation and verify functionality in the sandbox.",
+        "Working source code and sandbox execution results.",
+    )
+    .assign_to(coder_id)
+    .with_context_task(plan_id);
+
+    let review_task = Task::new(
+        "Review implementation, tests, and diffs for correctness and edge cases.",
+        "Comprehensive review findings and final approval status.",
+    )
+    .assign_to(reviewer_id)
+    .with_context_task(code_task.id.clone());
+
+    crew.add_task(plan_task);
+    crew.add_task(code_task);
+    crew.add_task(review_task);
+    crew
+}
+
+#[tauri::command]
+pub async fn list_tasks(state: State<'_, AppState>) -> Result<Vec<Task>, String> {
+    state
+        .client
+        .list_tasks()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn cancel_task(
+    state: State<'_, AppState>,
+    task_id: String,
+    reason: String,
+) -> Result<(), String> {
+    state
+        .client
+        .cancel_task(&TaskId::new(task_id), &reason)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_assignments(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> Result<Vec<Assignment>, String> {
+    state
+        .client
+        .list_assignments(&TaskId::new(task_id))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_assignment_events(
+    state: State<'_, AppState>,
+    assignment_id: String,
+) -> Result<Vec<AssignmentEvent>, String> {
+    state
+        .client
+        .list_assignment_events(&AssignmentId::new(assignment_id))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_runs(state: State<'_, AppState>, task_id: String) -> Result<Vec<Run>, String> {
+    state
+        .client
+        .list_runs(&TaskId::new(task_id))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn list_tool_calls(
+    state: State<'_, AppState>,
+    run_id: String,
+) -> Result<Vec<ToolCallRecord>, String> {
+    state
+        .client
+        .list_tool_calls(&RunId::new(run_id))
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn pending_approvals(state: State<'_, AppState>) -> Result<Vec<Approval>, String> {
+    state
+        .client
+        .pending_approvals()
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+pub async fn decide_approval(
+    state: State<'_, AppState>,
+    approval_id: String,
+    approved: bool,
+) -> Result<Approval, String> {
+    state
+        .client
+        .decide_approval(&ApprovalId::new(approval_id), approved)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+/// One provider as exposed to the frontend, without its API key.
+#[derive(Debug, Clone, Serialize)]
+pub struct ProviderView {
+    pub id: String,
+    pub name: String,
+    pub base_url: String,
+    pub model: String,
+    pub has_api_key: bool,
+    pub active: bool,
+}
+
+/// Model provider state rendered by the settings view.
+#[derive(Debug, Clone, Serialize)]
+pub struct ModelSettings {
+    pub providers: Vec<ProviderView>,
+    pub active_provider_id: Option<String>,
+    pub active_label: String,
+    pub config_path: String,
+}
+
+fn load_config(state: &AppState) -> Result<config::AppConfig, String> {
+    config::load(&state.config_path)
+        .map_err(|error| format!("failed to read {}: {error}", state.config_path.display()))
+}
+
+fn persist_config(
+    state: &AppState,
+    mut config: config::AppConfig,
+) -> Result<config::AppConfig, String> {
+    config.version = config::CONFIG_VERSION;
+    config::save(&state.config_path, &config)
+        .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))?;
+    state.apply_config(&config)?;
+    Ok(config)
+}
+
+fn model_settings(state: &AppState, config: &config::AppConfig) -> ModelSettings {
+    let active_id = config.active_provider().map(|provider| provider.id.clone());
+    let providers = config
+        .providers
+        .iter()
+        .map(|provider| ProviderView {
+            id: provider.id.clone(),
+            name: provider.name.clone(),
+            base_url: provider.base_url.clone(),
+            model: provider.model.clone(),
+            has_api_key: provider.api_key.is_some(),
+            active: active_id.as_deref() == Some(provider.id.as_str()),
+        })
+        .collect();
+    let active_label = config
+        .active_provider()
+        .map(|provider| provider.name.clone())
+        .unwrap_or_else(|| "Offline mock model".to_string());
+    ModelSettings {
+        providers,
+        active_provider_id: active_id,
+        active_label,
+        config_path: state.config_path.display().to_string(),
+    }
+}
+
+#[tauri::command]
+pub fn get_model_settings(state: State<'_, AppState>) -> Result<ModelSettings, String> {
+    let config = load_config(&state)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// Apply a create or update to an in-memory configuration.
+///
+/// A blank API key keeps the stored one; `clear_api_key` removes it. The first
+/// provider added to an empty configuration becomes active.
+fn upsert_provider(
+    config: &mut config::AppConfig,
+    provider_id: Option<&str>,
+    name: &str,
+    base_url: &str,
+    model: &str,
+    api_key: Option<&str>,
+    clear_api_key: bool,
+) -> Result<(), String> {
+    let typed_key = config::normalize_api_key(api_key);
+
+    match provider_id {
+        Some(id) => {
+            let index = config
+                .providers
+                .iter()
+                .position(|provider| provider.id == id)
+                .ok_or_else(|| format!("provider '{id}' was not found"))?;
+            let key = if clear_api_key {
+                None
+            } else {
+                typed_key.or_else(|| config.providers[index].api_key.clone())
+            };
+            config.providers[index] =
+                config::make_provider(id.to_string(), name, base_url, model, key.as_deref())?;
+        }
+        None => {
+            let id = config::new_provider_id(&config.providers);
+            let key = if clear_api_key { None } else { typed_key };
+            config.providers.push(config::make_provider(
+                id.clone(),
+                name,
+                base_url,
+                model,
+                key.as_deref(),
+            )?);
+            if config.active_provider().is_none() {
+                config.active_provider_id = Some(id);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Create a provider when `provider_id` is absent, otherwise update it.
+#[tauri::command]
+pub fn save_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+    name: String,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+    clear_api_key: bool,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    upsert_provider(
+        &mut config,
+        provider_id.as_deref(),
+        &name,
+        &base_url,
+        &model,
+        api_key.as_deref(),
+        clear_api_key,
+    )?;
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+#[tauri::command]
+pub fn delete_model_provider(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    let before = config.providers.len();
+    config
+        .providers
+        .retain(|provider| provider.id != provider_id);
+    if config.providers.len() == before {
+        return Err(format!("provider '{provider_id}' was not found"));
+    }
+    if config.active_provider_id.as_deref() == Some(provider_id.as_str()) {
+        config.active_provider_id = None;
+    }
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// Select the provider used for crew runs; `None` selects the offline mock.
+#[tauri::command]
+pub fn activate_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+) -> Result<ModelSettings, String> {
+    let mut config = load_config(&state)?;
+    match provider_id.as_deref() {
+        Some(id) => {
+            if config.providers.iter().all(|provider| provider.id != id) {
+                return Err(format!("provider '{id}' was not found"));
+            }
+            config.active_provider_id = Some(id.to_string());
+        }
+        None => config.active_provider_id = None,
+    }
+
+    let config = persist_config(&state, config)?;
+    Ok(model_settings(&state, &config))
+}
+
+/// First-run onboarding state for the desktop.
+#[derive(Debug, Clone, Serialize)]
+pub struct OnboardingState {
+    pub completed: bool,
+}
+
+fn onboarding_state(config: &config::AppConfig) -> OnboardingState {
+    OnboardingState {
+        completed: config.onboarding_completed,
+    }
+}
+
+#[tauri::command]
+pub fn get_onboarding_state(state: State<'_, AppState>) -> Result<OnboardingState, String> {
+    let config = load_config(&state)?;
+    Ok(onboarding_state(&config))
+}
+
+/// Mark the guided first-run setup as completed or skipped.
+#[tauri::command]
+pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState, String> {
+    let mut config = load_config(&state)?;
+    config.onboarding_completed = true;
+    let config = persist_config(&state, config)?;
+    Ok(onboarding_state(&config))
+}
+
+/// Send a minimal completion with the drafted provider settings.
+///
+/// A blank API key falls back to the key stored for `provider_id`, so a saved
+/// provider can be tested without retyping its secret.
+#[tauri::command]
+pub async fn test_model_provider(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+    base_url: String,
+    model: String,
+    api_key: Option<String>,
+) -> Result<String, String> {
+    let config = load_config(&state)?;
+    let stored_key = provider_id
+        .as_deref()
+        .and_then(|id| config.provider(id))
+        .and_then(|provider| provider.api_key.clone());
+    let api_key = config::normalize_api_key(api_key.as_deref()).or(stored_key);
+    let (base_url, model) = config::validate_endpoint(&base_url, &model)?;
+    let resolved = config::ResolvedModel {
+        kind: config::ProviderKind::OpenAiCompatible,
+        model,
+        base_url: Some(base_url),
+        api_key,
+    };
+    let provider = config::build_provider(&resolved);
+    let request = ChatCompletionRequest {
+        model: resolved.model.clone(),
+        messages: vec![ChatMessage::user("Reply with the single word OK.")],
+        tools: Vec::new(),
+        temperature: Some(0.0),
+    };
+
+    let response = tokio::time::timeout(Duration::from_secs(30), provider.chat_complete(&request))
+        .await
+        .map_err(|_| "The provider did not respond within 30 seconds.".to_string())?
+        .map_err(|error| error.to_string())?;
+
+    let reply = response.content.unwrap_or_default();
+    let reply = reply.trim();
+    if reply.is_empty() {
+        Ok(format!(
+            "Connected to '{}'. The provider returned an empty reply.",
+            resolved.model
+        ))
+    } else {
+        Ok(format!(
+            "Connected to '{}': {}",
+            resolved.model,
+            summarize_reply(reply)
+        ))
+    }
+}
+
+fn summarize_reply(reply: &str) -> String {
+    const LIMIT: usize = 120;
+    let mut summary: String = reply.chars().take(LIMIT).collect();
+    if reply.chars().count() > LIMIT {
+        summary.push('…');
+    }
+    summary
+}
+
+fn parse_approval_level(value: &str) -> Result<ApprovalLevel, String> {
+    match value {
+        "ask" => Ok(ApprovalLevel::Ask),
+        "safe_auto" => Ok(ApprovalLevel::SafeAuto),
+        "plan_only" => Ok(ApprovalLevel::PlanOnly),
+        "trusted" => Ok(ApprovalLevel::Trusted),
+        other => Err(format!("unknown approval level '{other}'")),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn approval_levels_parse() {
+        assert_eq!(parse_approval_level("ask"), Ok(ApprovalLevel::Ask));
+        assert_eq!(
+            parse_approval_level("safe_auto"),
+            Ok(ApprovalLevel::SafeAuto)
+        );
+        assert_eq!(
+            parse_approval_level("plan_only"),
+            Ok(ApprovalLevel::PlanOnly)
+        );
+        assert_eq!(parse_approval_level("trusted"), Ok(ApprovalLevel::Trusted));
+    }
+
+    #[test]
+    fn unknown_approval_level_is_rejected() {
+        assert!(parse_approval_level("sometimes").is_err());
+    }
+
+    #[test]
+    fn first_provider_becomes_active() {
+        let mut settings = config::AppConfig::default();
+
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers.len(), 1);
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some(settings.providers[0].id.as_str())
+        );
+        assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn updating_with_a_blank_key_keeps_the_stored_key() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+        let id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            Some(id.as_str()),
+            "Renamed",
+            "https://api.example.com/v1",
+            "example-model",
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers[0].name, "Renamed");
+        assert_eq!(settings.providers[0].base_url, "https://api.example.com/v1");
+        assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn clearing_the_key_removes_it() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+            false,
+        )
+        .unwrap();
+        let id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            Some(id.as_str()),
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            None,
+            true,
+        )
+        .unwrap();
+
+        assert!(settings.providers[0].api_key.is_none());
+    }
+
+    #[test]
+    fn adding_a_second_provider_keeps_the_active_one() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            None,
+            "First",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            None,
+            false,
+        )
+        .unwrap();
+        let first_id = settings.providers[0].id.clone();
+
+        upsert_provider(
+            &mut settings,
+            None,
+            "Second",
+            "https://api.example.org/v1",
+            "other-model",
+            None,
+            false,
+        )
+        .unwrap();
+
+        assert_eq!(settings.providers.len(), 2);
+        assert_eq!(
+            settings.active_provider_id.as_deref(),
+            Some(first_id.as_str())
+        );
+    }
+
+    #[test]
+    fn updating_an_unknown_provider_fails() {
+        let mut settings = config::AppConfig::default();
+
+        assert!(upsert_provider(
+            &mut settings,
+            Some("missing"),
+            "Name",
+            "https://api.example.com/v1",
+            "model",
+            None,
+            false,
+        )
+        .is_err());
+        assert!(settings.providers.is_empty());
+    }
+}

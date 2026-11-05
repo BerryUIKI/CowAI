@@ -3,6 +3,12 @@
 **/*.rs.bk
 *.cargo-ok
 
+# Desktop app
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/gen/
+
 # Environment variables & secrets
 .env
 .env.*
@@ -18,4 +24,5 @@
 
 # Test / runtime temporary files
 /tmp/
+/output/
 /sandbox_workspace/

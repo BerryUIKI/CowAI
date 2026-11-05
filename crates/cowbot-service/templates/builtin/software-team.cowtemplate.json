@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "kind": "team",
+  "id": "builtin-software-team",
+  "name": "Software Development Team",
+  "description": "A planner, coder, and reviewer team for implementing and verifying software changes.",
+  "version": "1.0.0",
+  "tags": ["software", "engineering", "team"],
+  "agents": [
+    {
+      "name": "Planner",
+      "role": "Lead Software Architect",
+      "goal": "Break requirements into a clear, verifiable implementation plan.",
+      "backstory": "An experienced architect who turns ambiguous goals into concrete tasks, interfaces, and acceptance criteria.",
+      "tools": [],
+      "allow_delegation": true,
+      "max_iterations": 15
+    },
+    {
+      "name": "Coder",
+      "role": "Senior Software Engineer",
+      "goal": "Implement the plan and verify the result with tests.",
+      "backstory": "A pragmatic engineer who writes maintainable code and always validates changes in the sandbox.",
+      "tools": ["execute_code", "read_file", "write_file"],
+      "max_iterations": 20
+    },
+    {
+      "name": "Reviewer",
+      "role": "Staff Code Reviewer",
+      "goal": "Find correctness, security, and maintainability issues before delivery.",
+      "backstory": "A meticulous reviewer who focuses on edge cases, security boundaries, and clear diffs.",
+      "tools": ["read_file"],
+      "max_iterations": 15
+    }
+  ],
+  "tasks": [
+    {
+      "id": "plan",
+      "description": "Analyze the objective and produce an implementation plan.",
+      "expected_output": "A step-by-step plan with acceptance criteria.",
+      "agent": "Planner",
+      "depends_on": []
+    },
+    {
+      "id": "implement",
+      "description": "Implement the plan and run verification commands.",
+      "expected_output": "Working code and test results.",
+      "agent": "Coder",
+      "depends_on": ["plan"]
+    },
+    {
+      "id": "review",
+      "description": "Review the implementation for correctness and risks.",
+      "expected_output": "Review findings and approval status.",
+      "agent": "Reviewer",
+      "depends_on": ["implement"]
+    }
+  ]
+}
