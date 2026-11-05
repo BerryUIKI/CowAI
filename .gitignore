@@ -6,6 +6,7 @@
 # Desktop app
 desktop/node_modules/
 desktop/dist/
+desktop/pnpm-debug.log*
 desktop/src-tauri/target/
 desktop/src-tauri/gen/
 
