@@ -8,47 +8,115 @@ import {
   saveModelProvider,
   testModelProvider,
 } from "./api";
-import type { ModelProvider, ModelSettings } from "./types";
+import type { ModelProvider, ModelSettings, ProviderProtocol } from "./types";
 
-type PresetId = "openai" | "deepseek" | "ollama" | "custom";
+interface ProtocolOption {
+  id: ProviderProtocol;
+  label: string;
+  description: string;
+}
+
+const protocolOptions: ProtocolOption[] = [
+  {
+    id: "openai",
+    label: "OpenAI Chat",
+    description: "Chat Completions API. OpenAI, DeepSeek, Ollama, and most relays.",
+  },
+  {
+    id: "anthropic",
+    label: "Anthropic",
+    description: "Messages API. Claude and Claude Code-compatible relays.",
+  },
+  {
+    id: "openai-responses",
+    label: "Responses",
+    description: "Responses API. OpenAI and Codex-style endpoints.",
+  },
+];
 
 interface ProviderPreset {
-  id: PresetId;
+  id: string;
   label: string;
+  protocol: ProviderProtocol;
   baseUrl: string;
   model: string;
 }
 
-const providerPresets: ProviderPreset[] = [
-  {
-    id: "openai",
-    label: "OpenAI",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4o",
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek",
-    baseUrl: "https://api.deepseek.com",
-    model: "deepseek-chat",
-  },
-  {
-    id: "ollama",
-    label: "Ollama",
-    baseUrl: "http://localhost:11434/v1",
-    model: "llama3.2",
-  },
-  {
+function customPreset(protocol: ProviderProtocol): ProviderPreset {
+  return {
     id: "custom",
     label: "Custom",
+    protocol,
     baseUrl: "",
     model: "",
-  },
-];
+  };
+}
+
+const presetsByProtocol: Record<ProviderProtocol, ProviderPreset[]> = {
+  openai: [
+    {
+      id: "openai",
+      label: "OpenAI",
+      protocol: "openai",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+    },
+    {
+      id: "deepseek",
+      label: "DeepSeek",
+      protocol: "openai",
+      baseUrl: "https://api.deepseek.com",
+      model: "deepseek-chat",
+    },
+    {
+      id: "ollama",
+      label: "Ollama",
+      protocol: "openai",
+      baseUrl: "http://localhost:11434/v1",
+      model: "llama3.2",
+    },
+    customPreset("openai"),
+  ],
+  anthropic: [
+    {
+      id: "claude",
+      label: "Claude",
+      protocol: "anthropic",
+      baseUrl: "https://api.anthropic.com",
+      model: "claude-sonnet-5-5",
+    },
+    customPreset("anthropic"),
+  ],
+  "openai-responses": [
+    {
+      id: "openai-responses",
+      label: "OpenAI Responses",
+      protocol: "openai-responses",
+      baseUrl: "https://api.openai.com/v1",
+      model: "gpt-4o",
+    },
+    customPreset("openai-responses"),
+  ],
+};
+
+function protocolLabel(protocol: ProviderProtocol): string {
+  return (
+    protocolOptions.find((option) => option.id === protocol)?.label ?? protocol
+  );
+}
+
+function presetFor(
+  protocol: ProviderProtocol,
+  presetId: string,
+): ProviderPreset {
+  const presets = presetsByProtocol[protocol];
+  return presets.find((preset) => preset.id === presetId) ?? presets[0];
+}
 
 interface ProviderDraft {
   providerId: string | null;
-  presetId: PresetId;
+  protocol: ProviderProtocol;
+  presetId: string;
   name: string;
   baseUrl: string;
   model: string;
@@ -64,6 +132,7 @@ interface ModelProviderSettingsProps {
 function draftForPreset(preset: ProviderPreset): ProviderDraft {
   return {
     providerId: null,
+    protocol: preset.protocol,
     presetId: preset.id,
     name: preset.id === "custom" ? "" : preset.label,
     baseUrl: preset.baseUrl,
@@ -76,6 +145,7 @@ function draftForPreset(preset: ProviderPreset): ProviderDraft {
 function draftForProvider(provider: ModelProvider): ProviderDraft {
   return {
     providerId: provider.id,
+    protocol: provider.protocol,
     presetId: "custom",
     name: provider.name,
     baseUrl: provider.base_url,
@@ -128,7 +198,7 @@ export default function ModelProviderSettings({
   }
 
   function startAddProvider() {
-    setDraft(draftForPreset(providerPresets[0]));
+    setDraft(draftForPreset(presetsByProtocol.openai[0]));
     setModelError(null);
     setModelNotice(null);
   }
@@ -139,12 +209,24 @@ export default function ModelProviderSettings({
     setModelNotice(null);
   }
 
-  function changePreset(presetId: PresetId) {
-    const preset = providerPresets.find((item) => item.id === presetId);
-    if (!preset) return;
+  function changeProtocol(protocol: ProviderProtocol) {
+    if (!draft) return;
+    const preset = presetsByProtocol[protocol][0];
+    updateDraft({
+      protocol,
+      presetId: preset.id,
+      name: draft.providerId ? draft.name : preset.label,
+      baseUrl: preset.baseUrl,
+      model: preset.model,
+    });
+  }
+
+  function changePreset(presetId: string) {
+    if (!draft) return;
+    const preset = presetFor(draft.protocol, presetId);
     updateDraft({
       presetId,
-      name: preset.label === "Custom" ? (draft?.name ?? "") : preset.label,
+      name: preset.id === "custom" ? draft.name : preset.label,
       baseUrl: preset.baseUrl,
       model: preset.model,
     });
@@ -160,6 +242,7 @@ export default function ModelProviderSettings({
     try {
       const next = await saveModelProvider({
         providerId: draft.providerId,
+        protocol: draft.protocol,
         name: draft.name,
         baseUrl: draft.baseUrl,
         model: draft.model,
@@ -185,6 +268,7 @@ export default function ModelProviderSettings({
     try {
       const message = await testModelProvider({
         providerId: draft.providerId,
+        protocol: draft.protocol,
         baseUrl: draft.baseUrl,
         model: draft.model,
         apiKey: draft.apiKey,
@@ -204,6 +288,7 @@ export default function ModelProviderSettings({
     try {
       const message = await testModelProvider({
         providerId: provider.id,
+        protocol: provider.protocol,
         baseUrl: provider.base_url,
         model: provider.model,
         apiKey: "",
@@ -251,6 +336,22 @@ export default function ModelProviderSettings({
     }
   }
 
+  const status =
+    modelError || modelNotice ? (
+      <>
+        {modelError ? (
+          <p className="settings-status is-error" role="alert">
+            {modelError}
+          </p>
+        ) : null}
+        {modelNotice ? (
+          <p className="settings-status is-ok" role="status">
+            {modelNotice}
+          </p>
+        ) : null}
+      </>
+    ) : null;
+
   if (!modelSettings) {
     return <p className="settings-empty">Loading model settings…</p>;
   }
@@ -263,7 +364,7 @@ export default function ModelProviderSettings({
           <p className="settings-card-title">{modelSettings.active_label}</p>
           <p className="settings-card-subtitle">
             {activeProvider
-              ? `${activeProvider.model} · ${activeProvider.base_url}`
+              ? `${protocolLabel(activeProvider.protocol)} · ${activeProvider.model} · ${activeProvider.base_url}`
               : "No provider selected. Runs use the offline mock model."}
           </p>
         </div>
@@ -289,6 +390,9 @@ export default function ModelProviderSettings({
             <li key={provider.id} className="settings-card">
               <div className="settings-card-head">
                 <span className="settings-card-title">{provider.name}</span>
+                <span className="settings-badge">
+                  {protocolLabel(provider.protocol)}
+                </span>
                 {provider.active ? (
                   <span className="settings-badge settings-badge-active">Active</span>
                 ) : null}
@@ -343,29 +447,58 @@ export default function ModelProviderSettings({
       )}
 
       {draft ? (
-        <form className="settings-form" onSubmit={handleSaveProvider}>
+        <form className="settings-form provider-editor" onSubmit={handleSaveProvider}>
+          <div className="protocol-choice" role="group" aria-label="API protocol">
+            {protocolOptions.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`protocol-option${
+                  draft.protocol === option.id ? " is-selected" : ""
+                }`}
+                aria-pressed={draft.protocol === option.id}
+                onClick={() => changeProtocol(option.id)}
+                disabled={modelBusy !== null}
+              >
+                <span className="protocol-option-label">{option.label}</span>
+                <span className="protocol-option-hint">{option.description}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="preset-row" role="group" aria-label="Provider presets">
+            {presetsByProtocol[draft.protocol].map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className={`preset-chip${
+                  draft.presetId === preset.id ? " is-selected" : ""
+                }`}
+                aria-pressed={draft.presetId === preset.id}
+                onClick={() => changePreset(preset.id)}
+                disabled={modelBusy !== null}
+              >
+                {preset.label}
+              </button>
+            ))}
+          </div>
+
           <div className="settings-form-row">
-            {draft.providerId === null ? (
-              <label className="field">
-                <span>Preset</span>
-                <select
-                  value={draft.presetId}
-                  onChange={(event) => changePreset(event.target.value as PresetId)}
-                >
-                  {providerPresets.map((preset) => (
-                    <option key={preset.id} value={preset.id}>
-                      {preset.label}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            ) : null}
             <label className="field">
               <span>Name</span>
               <input
                 value={draft.name}
                 onChange={(event) => updateDraft({ name: event.target.value })}
                 placeholder="OpenAI"
+                autoComplete="off"
+              />
+            </label>
+            <label className="field">
+              <span>Model</span>
+              <input
+                value={draft.model}
+                onChange={(event) => updateDraft({ model: event.target.value })}
+                placeholder="gpt-4o"
                 autoComplete="off"
               />
             </label>
@@ -376,41 +509,34 @@ export default function ModelProviderSettings({
             <input
               value={draft.baseUrl}
               onChange={(event) => updateDraft({ baseUrl: event.target.value })}
-              placeholder="https://api.openai.com/v1"
+              placeholder={
+                draft.protocol === "anthropic"
+                  ? "https://api.anthropic.com"
+                  : "https://api.openai.com/v1"
+              }
               autoComplete="off"
             />
           </label>
 
-          <div className="settings-form-row">
-            <label className="field">
-              <span>Model</span>
-              <input
-                value={draft.model}
-                onChange={(event) => updateDraft({ model: event.target.value })}
-                placeholder="gpt-4o"
-                autoComplete="off"
-              />
-            </label>
-            <label className="field">
-              <span>API key</span>
-              <input
-                type="password"
-                value={draft.apiKey}
-                onChange={(event) =>
-                  updateDraft({
-                    apiKey: event.target.value,
-                    clearApiKey: false,
-                  })
-                }
-                placeholder={
-                  hasStoredKey
-                    ? "Saved — leave blank to keep"
-                    : "Optional for local endpoints"
-                }
-                autoComplete="off"
-              />
-            </label>
-          </div>
+          <label className="field">
+            <span>API key</span>
+            <input
+              type="password"
+              value={draft.apiKey}
+              onChange={(event) =>
+                updateDraft({
+                  apiKey: event.target.value,
+                  clearApiKey: false,
+                })
+              }
+              placeholder={
+                hasStoredKey
+                  ? "Saved — leave blank to keep"
+                  : "Optional for local endpoints"
+              }
+              autoComplete="off"
+            />
+          </label>
 
           {hasStoredKey ? (
             <label className="settings-checkbox">
@@ -445,7 +571,11 @@ export default function ModelProviderSettings({
               type="button"
               className="ghost-button"
               onClick={handleTestProvider}
-              disabled={modelBusy !== null}
+              disabled={
+                modelBusy !== null ||
+                !draft.baseUrl.trim() ||
+                !draft.model.trim()
+              }
             >
               {modelBusy === "test-provider" ? "Testing…" : "Test connection"}
             </button>
@@ -459,27 +589,22 @@ export default function ModelProviderSettings({
             </button>
           </div>
 
+          {status}
+
           <p className="settings-hint">
             Keys are stored in plain text in the local configuration file;
             protect it as sensitive local data.
           </p>
         </form>
       ) : (
-        <button type="button" className="settings-add-button" onClick={startAddProvider}>
-          <span aria-hidden="true">+</span> Add provider
-        </button>
+        <>
+          <button type="button" className="settings-add-button" onClick={startAddProvider}>
+            <span aria-hidden="true">+</span> Add provider
+          </button>
+          {status}
+        </>
       )}
 
-      {modelError ? (
-        <p className="settings-status is-error" role="alert">
-          {modelError}
-        </p>
-      ) : null}
-      {modelNotice ? (
-        <p className="settings-status is-ok" role="status">
-          {modelNotice}
-        </p>
-      ) : null}
       {showConfigPath ? (
         <p className="settings-note">Configuration: {modelSettings.config_path}</p>
       ) : null}
