@@ -193,6 +193,10 @@ export interface ModelSettings {
   config_path: string;
 }
 
+export interface OnboardingState {
+  completed: boolean;
+}
+
 const taskStatusLabels = {
   pending: "Pending",
   in_progress: "In progress",

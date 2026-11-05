@@ -2,14 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from "react";
 
 import ApprovalCards from "./ApprovalCards";
+import Onboarding from "./Onboarding";
 import SettingsView from "./SettingsView";
 import TaskDetail from "./TaskDetail";
 import type { AssignmentWithEvents, RunWithCalls } from "./TaskDetail";
 import {
   cancelTask,
+  completeOnboarding,
   createChannel,
   createTask,
   decideApproval,
+  getOnboardingState,
   getSession,
   instantiateAgents,
   listAgents,
@@ -37,6 +40,7 @@ import type {
   Channel,
   ChannelMessage,
   ClientSession,
+  OnboardingState,
   Task,
   TemplateDocument,
 } from "./types";
@@ -78,6 +82,7 @@ export default function App() {
   const [taskRuns, setTaskRuns] = useState<RunWithCalls[]>([]);
   const [agents, setAgents] = useState<AgentProfile[]>([]);
   const [templates, setTemplates] = useState<TemplateDocument[]>([]);
+  const [onboarding, setOnboarding] = useState<OnboardingState | null>(null);
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
@@ -108,6 +113,8 @@ export default function App() {
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
     [tasks, selectedTaskId],
   );
+
+  const onboardingOpen = onboarding !== null && !onboarding.completed;
 
   const refreshChannels = useCallback(async (preferredId?: string) => {
     const next = await listChannels();
@@ -189,15 +196,26 @@ export default function App() {
 
     (async () => {
       try {
-        const [nextSession, nextChannels, nextTasks, nextApprovals, nextAgents, nextTemplates] =
-          await Promise.all([
-            getSession(),
-            listChannels(),
-            listTasks(),
-            pendingApprovals(),
-            listAgents(),
-            listTemplates(),
-          ]);
+        const [
+          nextSession,
+          nextChannels,
+          nextTasks,
+          nextApprovals,
+          nextAgents,
+          nextTemplates,
+          nextOnboarding,
+        ] = await Promise.all([
+          getSession(),
+          listChannels(),
+          listTasks(),
+          pendingApprovals(),
+          listAgents(),
+          listTemplates(),
+          getOnboardingState().catch((err) => {
+            if (!cancelled) setError(errorMessage(err));
+            return { completed: true };
+          }),
+        ]);
         if (cancelled) return;
         setSession(nextSession);
         setChannels(nextChannels);
@@ -207,6 +225,7 @@ export default function App() {
         setApprovals(nextApprovals);
         setAgents(nextAgents);
         setTemplates(nextTemplates);
+        setOnboarding(nextOnboarding);
       } catch (err) {
         if (!cancelled) setError(errorMessage(err));
       } finally {
@@ -407,19 +426,29 @@ export default function App() {
     }
   }
 
+  async function instantiateTemplate(templateId: string) {
+    const added = await instantiateAgents(templateId);
+    await refreshAgents();
+    if (added[0]) setTaskAssignee(added[0].id);
+    return added;
+  }
+
   async function handleAddAgents() {
     if (!templateId) return;
     setBusy("add-agents");
     setError(null);
     try {
-      const added = await instantiateAgents(templateId);
-      await refreshAgents();
-      if (added[0]) setTaskAssignee(added[0].id);
+      await instantiateTemplate(templateId);
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setBusy(null);
     }
+  }
+
+  async function handleCompleteOnboarding() {
+    const next = await completeOnboarding();
+    setOnboarding(next);
   }
 
   async function handleCancelTask() {
@@ -472,7 +501,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside className="sidebar" inert={onboardingOpen}>
         <img className="wordmark" src={wordmark} alt="CowBot" />
 
         <div className="workspace">
@@ -658,7 +687,7 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="main">
+      <main className="main" inert={onboardingOpen}>
         {error ? (
           <div className="error-banner" role="alert">
             <span>{error}</span>
@@ -926,6 +955,15 @@ export default function App() {
           />
         )}
       </main>
+
+      {onboardingOpen ? (
+        <Onboarding
+          templates={templates}
+          agents={agents}
+          onAddAgents={instantiateTemplate}
+          onComplete={handleCompleteOnboarding}
+        />
+      ) : null}
     </div>
   );
 }

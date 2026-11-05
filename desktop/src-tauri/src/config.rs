@@ -36,11 +36,27 @@ pub struct ProviderConfig {
 
 /// Whole desktop configuration file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
 pub struct AppConfig {
+    #[serde(default = "current_version")]
     pub version: u32,
+    #[serde(default)]
     pub active_provider_id: Option<String>,
+    #[serde(default)]
     pub providers: Vec<ProviderConfig>,
+    /// Whether the guided first-run setup has been completed or skipped.
+    ///
+    /// Legacy files written before onboarding existed are treated as completed
+    /// so an upgrade does not show the guide to an existing user.
+    #[serde(default = "onboarding_default_for_legacy")]
+    pub onboarding_completed: bool,
+}
+
+fn current_version() -> u32 {
+    CONFIG_VERSION
+}
+
+fn onboarding_default_for_legacy() -> bool {
+    true
 }
 
 impl Default for AppConfig {
@@ -49,6 +65,7 @@ impl Default for AppConfig {
             version: CONFIG_VERSION,
             active_provider_id: None,
             providers: Vec::new(),
+            onboarding_completed: false,
         }
     }
 }
@@ -261,6 +278,33 @@ mod tests {
         assert_eq!(config, AppConfig::default());
         assert!(config.providers.is_empty());
         assert!(config.active_provider_id.is_none());
+        assert!(!config.onboarding_completed);
+    }
+
+    #[test]
+    fn legacy_config_files_are_treated_as_onboarded() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"active_provider_id":null,"providers":[]}"#,
+        )
+        .unwrap();
+
+        assert!(load(&path).unwrap().onboarding_completed);
+    }
+
+    #[test]
+    fn explicit_onboarding_state_is_preserved() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"providers":[],"onboarding_completed":false}"#,
+        )
+        .unwrap();
+
+        assert!(!load(&path).unwrap().onboarding_completed);
     }
 
     #[test]
@@ -271,6 +315,7 @@ mod tests {
             version: CONFIG_VERSION,
             active_provider_id: Some("one".to_string()),
             providers: vec![sample_provider("one", "Example")],
+            onboarding_completed: true,
         };
 
         save(&path, &config).unwrap();

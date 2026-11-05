@@ -131,6 +131,8 @@ pub fn run() {
             commands::delete_model_provider,
             commands::activate_model_provider,
             commands::test_model_provider,
+            commands::get_onboarding_state,
+            commands::complete_onboarding,
         ])
         .run(tauri::generate_context!())
         .expect("error while running CowBot");
