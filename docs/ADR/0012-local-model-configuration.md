@@ -4,6 +4,7 @@
 - **Date**: 2026-11-05
 - **Related**: `docs/ADR/0007-client-api.md`, `docs/ADR/0009-desktop-ipc-and-state.md`, `docs/ARCHITECTURE.md` §3.9
 - **Supersedes**: The provider-selection paragraph of ADR-0009 §6 (desktop execution)
+- **Extended by**: ADR-0016 (provider protocols)
 
 ## Context
 
