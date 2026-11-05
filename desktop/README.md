@@ -49,6 +49,28 @@ npm run build                    # type-check and bundle the frontend
 npm run tauri build              # produce platform bundles
 ```
 
+## Release builds
+
+The [release workflow](../.github/workflows/release.yml) builds installers on manual dispatch and on `v*` tags:
+
+- **Windows:** NSIS `setup.exe` and `.msi`
+- **macOS:** universal `.dmg` for Apple Silicon and Intel
+- **Linux:** `.deb` and `.AppImage`
+
+Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.0` for `0.1.0`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
+
+Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. Signing, notarization, and auto-updates are follow-up work (ADR-0014).
+
+Build bundles locally with:
+
+```bash
+npm run tauri build -- --bundles nsis,msi      # Windows
+npm run tauri build -- --bundles dmg           # macOS
+npm run tauri build -- --bundles deb,appimage  # Linux
+```
+
+Bundles are written under `src-tauri/target/release/bundle/`, or under the target-specific directory when `--target` is used.
+
 ## Quality checks
 
 ```bash
