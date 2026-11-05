@@ -16,8 +16,8 @@ use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_service::{
-    bootstrap_local, ApprovalService, AssignmentService, ChannelService, CrewRunner, TaskService,
-    TemplateService,
+    bootstrap_local, bootstrap_local_named, ApprovalService, AssignmentService, ChannelService,
+    CrewRunner, LocalContext, TaskService, TemplateService,
 };
 use cowbot_store::Store;
 use tokio::sync::{broadcast, mpsc};
@@ -53,7 +53,10 @@ impl LocalClient {
     async fn initialize(store: Store, bus: EventBus) -> CowResult<Self> {
         store.migrate().await?;
         let context = bootstrap_local(&store).await?;
+        Self::build(store, bus, context).await
+    }
 
+    async fn build(store: Store, bus: EventBus, context: LocalContext) -> CowResult<Self> {
         let assignments = AssignmentService::new(store.clone(), bus.clone());
         assignments.reconcile_on_startup().await?;
         let approvals =
@@ -124,6 +127,19 @@ impl LocalClient {
                 audit_events: summary.audit_events,
             },
         ))
+    }
+
+    /// Create a new local database with an empty workspace named `name`.
+    pub async fn create_workspace_database(path: impl AsRef<Path>, name: &str) -> CowResult<Self> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(CowError::Config("workspace name is required".to_string()));
+        }
+
+        let store = Store::connect(path).await?;
+        store.migrate().await?;
+        let context = bootstrap_local_named(&store, "Local Owner", name).await?;
+        Self::build(store, EventBus::default_bus(), context).await
     }
 
     /// Execute a sequential crew through the local assignment runtime.
@@ -497,5 +513,23 @@ mod tests {
 
         let channels = imported.list_channels().await.unwrap();
         assert!(channels.iter().any(|channel| channel.name == "general"));
+    }
+
+    #[tokio::test]
+    async fn new_workspace_databases_use_the_requested_name() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("team.db");
+
+        let client = LocalClient::create_workspace_database(&path, "Team Workspace")
+            .await
+            .unwrap();
+        let session = client.session().await.unwrap();
+
+        assert_eq!(session.workspace.name, "Team Workspace");
+        assert_eq!(session.user.name, "Local Owner");
+        assert!(client.list_channels().await.unwrap().is_empty());
+        assert!(LocalClient::create_workspace_database(&path, "  ")
+            .await
+            .is_err());
     }
 }
