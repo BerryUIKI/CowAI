@@ -46,12 +46,14 @@ the old key or a reinstall.
 ### 3. Release artifacts and manifest
 
 `bundle.createUpdaterArtifacts` makes the bundler create a macOS updater archive
-and sign the NSIS, MSI, AppImage, and deb bundles. The release workflow uploads
-the signatures as release assets. A final `updater-json` job runs after all
-three platform builds and writes `latest.json` from those signatures, so the
-manifest always contains every platform. It does not use tauri-action's own
-updater JSON upload because its read-modify-write of a single release asset is
-racy across the three build jobs.
+and sign the NSIS, MSI, AppImage, and deb bundles. The macOS job must build the
+`app` bundle as well as the `dmg`: Tauri only produces the `.app.tar.gz` updater
+archive for the `app` target, and the `updater-json` job requires its signature.
+The release workflow uploads the signatures as release assets. A final
+`updater-json` job runs after all three platform builds and writes `latest.json`
+from those signatures, so the manifest always contains every platform. It does
+not use tauri-action's own updater JSON upload because its read-modify-write of
+a single release asset is racy across the three build jobs.
 
 ### 4. Desktop behavior
 

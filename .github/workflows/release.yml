@@ -31,7 +31,7 @@ jobs:
             args: --bundles nsis,msi
           - platform: macos-latest
             artifact: cowbot-macos
-            args: --target universal-apple-darwin --bundles dmg
+            args: --target universal-apple-darwin --bundles app,dmg
           - platform: ubuntu-22.04
             artifact: cowbot-linux
             args: --bundles deb,appimage
