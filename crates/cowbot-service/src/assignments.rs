@@ -246,7 +246,7 @@ impl AssignmentService {
                 },
             )
             .await?;
-        let _ = self.bus.publish(Event::new(EventPayload::TaskCompleted {
+        self.bus.publish(Event::new(EventPayload::TaskCompleted {
             task_id: assignment.task_id.clone(),
             output,
         }));
@@ -279,7 +279,7 @@ impl AssignmentService {
                 },
             )
             .await?;
-        let _ = self.bus.publish(Event::new(EventPayload::TaskFailed {
+        self.bus.publish(Event::new(EventPayload::TaskFailed {
             task_id: assignment.task_id.clone(),
             error,
         }));
@@ -521,13 +521,12 @@ impl AssignmentService {
     }
 
     fn publish_task_created(&self, task: &Task) {
-        let _ = self
-            .bus
+        self.bus
             .publish(Event::new(EventPayload::TaskCreated(task.clone())));
     }
 
     fn publish_task_assigned(&self, task: &Task, assignment: &Assignment) {
-        let _ = self.bus.publish(Event::new(EventPayload::TaskAssigned {
+        self.bus.publish(Event::new(EventPayload::TaskAssigned {
             task_id: task.id.clone(),
             agent_id: assignment.assignee.clone(),
         }));

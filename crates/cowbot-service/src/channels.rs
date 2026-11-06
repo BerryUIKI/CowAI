@@ -36,8 +36,7 @@ impl ChannelService {
     ) -> CowResult<Channel> {
         let channel = Channel::new(name, topic);
         self.store.create_channel(workspace_id, &channel).await?;
-        let _ = self
-            .bus
+        self.bus
             .publish(Event::new(EventPayload::ChannelCreated(channel.clone())));
         Ok(channel)
     }
@@ -69,8 +68,7 @@ impl ChannelService {
         }
 
         self.store.append_message(&message).await?;
-        let _ = self
-            .bus
+        self.bus
             .publish(Event::new(EventPayload::MessagePosted(message.clone())));
         Ok(message)
     }
