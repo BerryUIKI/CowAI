@@ -68,6 +68,8 @@ impl AppState {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -179,6 +181,9 @@ pub fn run() {
             commands::test_model_provider,
             commands::get_onboarding_state,
             commands::complete_onboarding,
+            commands::get_app_info,
+            commands::set_auto_check_updates,
+            commands::restart_app,
             commands::list_workspaces,
             commands::switch_workspace,
             commands::create_workspace,

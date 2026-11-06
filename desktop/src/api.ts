@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 import type {
   AgentProfile,
+  AppInfo,
   Approval,
   ApprovalLevel,
   Assignment,
@@ -195,4 +196,16 @@ export function importWorkspace(path: string): Promise<void> {
 
 export function createWorkspace(name: string): Promise<void> {
   return invoke<void>("create_workspace", { name });
+}
+
+export function getAppInfo(): Promise<AppInfo> {
+  return invoke<AppInfo>("get_app_info");
+}
+
+export function setAutoCheckUpdates(enabled: boolean): Promise<void> {
+  return invoke<void>("set_auto_check_updates", { enabled });
+}
+
+export function restartApp(): Promise<void> {
+  return invoke<void>("restart_app");
 }
