@@ -48,10 +48,6 @@ function toolResultText(result: unknown): string {
   return JSON.stringify(result ?? null) ?? "null";
 }
 
-function assignmentStatusKind(status: Assignment["status"]): string {
-  return status;
-}
-
 export default function TaskDetail({
   task,
   assignments,
@@ -146,7 +142,7 @@ export default function TaskDetail({
           assignments.map(({ assignment, events }) => (
             <details className="assignment" key={assignment.id}>
               <summary>
-                <span className={`status-dot status-${assignmentStatusKind(assignment.status)}`} />
+                <span className={`status-dot status-${assignment.status}`} />
                 <span className="summary-label">{assignment.status.replaceAll("_", " ")}</span>
                 <span className="muted">
                   {approvalLevelLabel(assignment.approval_level)} · {assignment.executions} run

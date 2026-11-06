@@ -1,3 +1,4 @@
+import UpdateProgress from "./UpdateProgress";
 import type { Updater } from "./updater";
 
 interface UpdateBannerProps {
@@ -20,11 +21,6 @@ export default function UpdateBanner({ updater, tasksRunning }: UpdateBannerProp
 
   if (!visible) return null;
 
-  const percent =
-    state.total && state.total > 0
-      ? Math.min(100, Math.round((state.downloaded / state.total) * 100))
-      : null;
-
   return (
     <div className="update-banner" role="status">
       <div className="update-banner-body">
@@ -43,16 +39,7 @@ export default function UpdateBanner({ updater, tasksRunning }: UpdateBannerProp
         ) : null}
 
         {state.phase === "downloading" ? (
-          <div className="update-progress" aria-label="Download progress">
-            {percent !== null ? (
-              <div className="update-progress-track">
-                <div className="update-progress-fill" style={{ width: `${percent}%` }} />
-              </div>
-            ) : null}
-            <span className="update-progress-label">
-              {percent === null ? "Downloading…" : `Downloading… ${percent}%`}
-            </span>
-          </div>
+          <UpdateProgress downloaded={state.downloaded} total={state.total} />
         ) : null}
 
         {state.phase === "ready" ? (

@@ -8,6 +8,7 @@ import {
   saveModelProvider,
   testModelProvider,
 } from "./api";
+import { errorMessage } from "./errors";
 import type { ModelProvider, ModelSettings, ProviderProtocol } from "./types";
 
 interface ProtocolOption {
@@ -153,12 +154,6 @@ function draftForProvider(provider: ModelProvider): ProviderDraft {
     apiKey: "",
     clearApiKey: false,
   };
-}
-
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Try again.";
 }
 
 export default function ModelProviderSettings({

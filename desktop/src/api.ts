@@ -140,7 +140,7 @@ export function saveModelProvider(input: {
       name: input.name,
       baseUrl: input.baseUrl,
       model: input.model,
-      apiKey: input.apiKey.trim() ? input.apiKey : null,
+      apiKey: input.apiKey,
       clearApiKey: input.clearApiKey,
     },
   });
@@ -166,7 +166,7 @@ export function testModelProvider(input: {
     protocol: input.protocol,
     baseUrl: input.baseUrl,
     model: input.model,
-    apiKey: input.apiKey.trim() ? input.apiKey : null,
+    apiKey: input.apiKey,
   });
 }
 

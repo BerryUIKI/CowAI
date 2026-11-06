@@ -3,6 +3,8 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 
 import ModelProviderSettings from "./ModelProviderSettings";
+import UpdateProgress from "./UpdateProgress";
+import { errorMessage } from "./errors";
 import { formatDateTime } from "./format";
 import {
   createWorkspace,
@@ -49,12 +51,6 @@ function agentInitials(name: string): string {
     .join("");
 }
 
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Try again.";
-}
-
 function packageFileName(name: string | undefined): string {
   const base =
     (name ?? "workspace").trim().replace(/[\\/:*?"<>|]+/g, "-") || "workspace";
@@ -95,14 +91,6 @@ export default function SettingsView({
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
   const [updateError, setUpdateError] = useState<string | null>(null);
-
-  const updatePercent =
-    updater.state.total && updater.state.total > 0
-      ? Math.min(
-          100,
-          Math.round((updater.state.downloaded / updater.state.total) * 100),
-        )
-      : null;
 
   useEffect(() => {
     let cancelled = false;
@@ -605,24 +593,11 @@ export default function SettingsView({
               ) : null}
 
               {updater.state.phase === "downloading" ? (
-                <div
-                  className="update-progress settings-update-progress"
-                  aria-label="Download progress"
-                >
-                  {updatePercent !== null ? (
-                    <div className="update-progress-track">
-                      <div
-                        className="update-progress-fill"
-                        style={{ width: `${updatePercent}%` }}
-                      />
-                    </div>
-                  ) : null}
-                  <span className="update-progress-label">
-                    {updatePercent === null
-                      ? "Downloading…"
-                      : `Downloading… ${updatePercent}%`}
-                  </span>
-                </div>
+                <UpdateProgress
+                  className="settings-update-progress"
+                  downloaded={updater.state.downloaded}
+                  total={updater.state.total}
+                />
               ) : null}
 
               {updater.state.phase === "ready" ? (
