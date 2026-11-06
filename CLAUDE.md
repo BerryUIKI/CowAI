@@ -48,7 +48,7 @@ The project is structured as a Cargo workspace under `crates/`:
 
 ## Website
 
-`site/` holds the GitHub Pages landing page (plain HTML/CSS/JS, no build step): a hero with an interactive approval demo, platform download links resolved from the GitHub Releases API, feature and architecture sections, and a quick start. `.github/workflows/pages.yml` publishes it on pushes to `main` that touch `site/`, `docs/assets/`, or `assets/brand/`, assembling those folders into one artifact so relative asset paths keep working. The workflow needs GitHub Pages set to "GitHub Actions" as its source. Preview locally with `.claude/launch.json` (serves an assembled copy from `tmp/site-preview/`).
+`site/` holds the GitHub Pages landing page (plain HTML/CSS/JS, no build step): a hero with an interactive approval demo, platform download links resolved from the GitHub Releases API, feature and architecture sections, and a quick start. It is published from the `gh-pages` branch, which holds an assembled copy of `site/` plus `assets/brand/` and `docs/assets/` so relative asset paths resolve. The `gh-pages` branch is generated output; edit `site/` and republish it with `bash site/publish.sh` (add `--dry-run` to write to `tmp/gh-pages/` without pushing). Pages serves that branch's root.
 
 ## Desktop App
 
