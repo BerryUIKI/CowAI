@@ -190,16 +190,16 @@ fn is_read_only_command(normalized: &str) -> bool {
     const PREFIXES: &[&str] = &[
         "ls",
         "dir",
-        "cat ",
-        "type ",
-        "head ",
-        "tail ",
-        "grep ",
-        "rg ",
-        "find ",
+        "cat",
+        "type",
+        "head",
+        "tail",
+        "grep",
+        "rg",
+        "find",
         "pwd",
-        "wc ",
-        "stat ",
+        "wc",
+        "stat",
         "whoami",
         "git status",
         "git diff",
@@ -207,16 +207,18 @@ fn is_read_only_command(normalized: &str) -> bool {
         "git show",
         "git branch",
     ];
-    PREFIXES
-        .iter()
-        .any(|prefix| normalized == *prefix || normalized.starts_with(&format!("{prefix} ")))
+    matches_prefix(normalized, PREFIXES)
 }
 
 fn is_low_risk_command(normalized: &str) -> bool {
-    const PREFIXES: &[&str] = &["echo ", "mkdir ", "touch ", "cp ", "copy "];
-    PREFIXES
+    const PREFIXES: &[&str] = &["echo", "mkdir", "touch", "cp", "copy"];
+    matches_prefix(normalized, PREFIXES)
+}
+
+fn matches_prefix(normalized: &str, prefixes: &[&str]) -> bool {
+    prefixes
         .iter()
-        .any(|prefix| normalized == *prefix || normalized.starts_with(prefix))
+        .any(|prefix| normalized == *prefix || normalized.starts_with(&format!("{prefix} ")))
 }
 
 fn has_shell_composition(normalized: &str) -> bool {
@@ -270,6 +272,15 @@ mod tests {
         let assessment =
             StaticRiskClassifier.classify(&call("execute_code", json!({ "command": "ls -la" })));
         assert_eq!(assessment.level, RiskLevel::ReadOnly);
+    }
+
+    #[test]
+    fn read_only_command_with_arguments_is_read_only() {
+        for command in ["cat file.txt", "head notes.md", "git status --short"] {
+            let assessment =
+                StaticRiskClassifier.classify(&call("execute_code", json!({ "command": command })));
+            assert_eq!(assessment.level, RiskLevel::ReadOnly, "{command}");
+        }
     }
 
     #[test]
