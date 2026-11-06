@@ -50,6 +50,10 @@ binaries themselves carry no publisher signature.
 - RPM packages, checksum sidecars beyond GitHub, and automated release notes.
 - Reproducible-build verification.
 
+> **Follow-up (2026-11-06):** auto-updates, signing keys, and the stable update
+> channel are implemented in [ADR-0018](0018-desktop-auto-updates.md). Code
+> signing and notarization remain deferred.
+
 ## Alternatives considered
 
 - **Build only locally.** No installable artifact for users and no reproducible
@@ -74,3 +78,7 @@ binaries themselves carry no publisher signature.
 - Release builds are slow, so they run only on tags and manual dispatch, not on
   pull requests. The existing desktop CI still builds and type-checks the shell.
 - Signing, notarization, and auto-updates remain follow-up work.
+
+> **Update (2026-11-06):** auto-updates are implemented in
+> [ADR-0018](0018-desktop-auto-updates.md); code signing and notarization
+> remain deferred.

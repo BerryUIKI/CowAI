@@ -18,8 +18,8 @@ The current UI has four views: **Channels** (channels and live messages),
 **Tasks** (create tasks, inspect assignment/run history, cancel, and run a crew
 on a submitted task), **Approvals** (approve or reject tool calls requested by
 running agents), and **Settings** (in the sidebar footer, with **Model**,
-**Team**, and **Workspace** sections for model providers, agents and templates,
-and workspace creation and transfer).
+**Team**, **Workspace**, and **About** sections for model providers, agents and
+templates, workspace creation and transfer, and version and update controls).
 
 Model providers are OpenAI Chat Completions, Anthropic Messages, or OpenAI
 Responses endpoints kept in `config.json` under the same app-data directory as
@@ -43,6 +43,28 @@ new workspace database and never merges data. See
 [ADR-0017](../docs/ADR/0017-desktop-workspace-transfer.md) and the
 [user guide](../docs/USER_GUIDE.md).
 
+## Updates
+
+The desktop uses the Tauri updater with GitHub Releases as the stable update
+channel. When **Check for updates automatically** is enabled (the default,
+stored in `config.json`), CowBot makes one request to GitHub at launch. A newer
+published release shows a banner in the main pane and a card in **Settings →
+About**; downloading and installing always need a click, and installing is
+refused while a crew runs. Restarting finishes the update; the Windows installer
+exits the app automatically.
+
+Updates apply to the NSIS installer on Windows, the app installed from the DMG
+on macOS, and the AppImage on Linux. MSI and deb installs update by downloading
+a new release. Builds remain unsigned, so macOS may ask for approval again after
+an update. See [ADR-0018](../docs/ADR/0018-desktop-auto-updates.md).
+
+The updater verifies a minisign signature against the public key in
+`src-tauri/tauri.conf.json`. The private key and password are repository
+secrets (`TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`);
+maintainers must keep an offline backup. Losing them prevents automatic updates
+for installed clients. The endpoint uses `releases/latest`, so an update is only
+visible after the draft release is published.
+
 ## Prerequisites
 
 - Node.js 22.13+ and pnpm (`corepack enable pnpm`, or `npm install -g pnpm`)
@@ -63,8 +85,14 @@ backend compiles.
 
 ```bash
 pnpm run build                    # type-check and bundle the frontend
-pnpm run tauri build              # produce platform bundles
+pnpm run tauri build -- --no-sign # produce platform bundles without signing
+pnpm run tauri build              # production bundles; needs the updater key
 ```
+
+Local bundle builds need `-- --no-sign` unless `TAURI_SIGNING_PRIVATE_KEY` and
+its password are set, because `bundle.createUpdaterArtifacts` signs updater
+artifacts during the build. CI supplies the key from repository secrets, so
+local release candidates should not drop `--no-sign` accidentally.
 
 ## Release builds
 
@@ -74,9 +102,9 @@ The [release workflow](../.github/workflows/release.yml) builds installers on ma
 - **macOS:** universal `.dmg` for Apple Silicon and Intel
 - **Linux:** `.deb` and `.AppImage`
 
-Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.1` for `0.1.1`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
+Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. Tag runs also sign updater artifacts with the repository secrets and a final `updater-json` job publishes `latest.json` for every platform. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.1` for `0.1.1`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
 
-Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. Signing, notarization, and auto-updates are follow-up work (ADR-0014).
+Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. OS code signing and notarization remain follow-up work (ADR-0014); the updater's own minisign signature is implemented in ADR-0018.
 
 Build bundles locally with:
 
