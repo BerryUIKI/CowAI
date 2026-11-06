@@ -46,6 +46,10 @@ The project is structured as a Cargo workspace under `crates/`:
 - **`crates/cowbot-service`**: Application services for the local runtime: idempotent local owner/workspace bootstrap, channel/message operations that persist first and then publish events, the assignment runtime (tree lifecycle, event log, budgets, stall guard, restart reconciliation), the approval service (risk policy, pending approvals, audit), a sequential crew runner built on assignments, and template management with built-in templates, validation, CRUD, and `.cowtemplate` import/export.
 - **`crates/cowbot-cli`**: The `cowbot` binary. `init` opens the local database through `cowbot-client` and prints the session; `run` executes the Planner/Coder/Reviewer crew through `LocalClient::run_crew` with persisted history, `--db`, `--dry-run`, and an interactive `--approval` policy; `tools` inspects the registry and smoke-tests the sandbox.
 
+## Website
+
+`site/` holds the GitHub Pages landing page (plain HTML/CSS/JS, no build step): a hero with an interactive approval demo, platform download links resolved from the GitHub Releases API, feature and architecture sections, and a quick start. `.github/workflows/pages.yml` publishes it on pushes to `main` that touch `site/`, `docs/assets/`, or `assets/brand/`, assembling those folders into one artifact so relative asset paths keep working. The workflow needs GitHub Pages set to "GitHub Actions" as its source. Preview locally with `.claude/launch.json` (serves an assembled copy from `tmp/site-preview/`).
+
 ## Desktop App
 
 The desktop app lives under `desktop/` and is not part of the Cargo workspace:
