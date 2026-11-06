@@ -29,7 +29,6 @@ Model providers live in a single `config.json` in the app data directory
 
 ```json
 {
-  "version": 1,
   "active_provider_id": "provider-1762300000000",
   "providers": [
     {
