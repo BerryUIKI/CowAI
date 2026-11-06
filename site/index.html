@@ -35,11 +35,18 @@
         <nav class="site-nav" aria-label="Primary">
           <a href="#download">Download</a>
           <a href="#features">Features</a>
+          <a href="#approvals">Approvals</a>
           <a href="#architecture">Architecture</a>
           <a href="#quickstart">Quick start</a>
           <a href="https://github.com/BerryUIKI/CowBot" rel="noopener">GitHub</a>
         </nav>
-        <a class="button button-small" href="#download">Get the app</a>
+        <div class="header-right">
+          <button class="theme-toggle" id="theme-toggle" type="button" aria-pressed="false" title="Toggle dark mode">
+            <span class="theme-icon" aria-hidden="true"></span>
+            <span class="theme-label">Dark</span>
+          </button>
+          <a class="button button-small" href="#download">Get the app</a>
+        </div>
       </div>
     </header>
 
@@ -120,7 +127,53 @@
         </div>
       </section>
 
-      <section class="section" id="download">
+      <section class="section section-rule" id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>One request, four visible steps.</h2>
+            <p>
+              A crew runs the same loop every time. Each step writes to the
+              workspace, so you can follow it live and read it again later.
+            </p>
+          </div>
+          <ol class="flow" data-reveal-group>
+            <li class="flow-step" data-reveal>
+              <span class="flow-index">1</span>
+              <h3>You state the task</h3>
+              <p>
+                Write it in a channel or create a task. The request becomes an
+                assignment with a budget and a lifecycle the runtime tracks.
+              </p>
+            </li>
+            <li class="flow-step" data-reveal>
+              <span class="flow-index">2</span>
+              <h3>Planner drafts the plan</h3>
+              <p>
+                The first role reads the goal and writes a deliverable. Its
+                output becomes context for the roles after it.
+              </p>
+            </li>
+            <li class="flow-step" data-reveal>
+              <span class="flow-index">3</span>
+              <h3>Coder works, tools ask first</h3>
+              <p>
+                Every tool call is classified before it runs. Anything above
+                your policy's threshold waits for your decision.
+              </p>
+            </li>
+            <li class="flow-step" data-reveal>
+              <span class="flow-index">4</span>
+              <h3>Reviewer closes the loop</h3>
+              <p>
+                The final role checks the work against the plan. Runs, tool
+                calls, and approval decisions are persisted as they happen.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="section section-rule" id="download">
         <div class="wrap">
           <div class="section-head">
             <h2>Download CowBot</h2>
@@ -249,6 +302,92 @@
         </div>
       </section>
 
+      <section class="section section-rule" id="approvals">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Decide how much an agent may do alone.</h2>
+            <p>
+              Risk is classified deterministically before every tool call, and
+              your policy decides which tiers run without asking you. Nothing
+              undecidable is ever auto-approved.
+            </p>
+          </div>
+
+          <div class="policy-board">
+            <div class="policy-tabs" role="tablist" aria-label="Approval policies">
+              <button class="policy-tab" role="tab" id="tab-ask" aria-controls="panel-ask" aria-selected="true" data-policy="ask" type="button">Ask</button>
+              <button class="policy-tab" role="tab" id="tab-safe" aria-controls="panel-safe" aria-selected="false" tabindex="-1" data-policy="safe" type="button">SafeAuto</button>
+              <button class="policy-tab" role="tab" id="tab-plan" aria-controls="panel-plan" aria-selected="false" tabindex="-1" data-policy="plan" type="button">PlanOnly</button>
+              <button class="policy-tab" role="tab" id="tab-trusted" aria-controls="panel-trusted" aria-selected="false" tabindex="-1" data-policy="trusted" type="button">Trusted</button>
+            </div>
+
+            <div class="policy-panels">
+              <div class="policy-panel" role="tabpanel" id="panel-ask" aria-labelledby="tab-ask" data-panel="ask">
+                <div class="policy-copy">
+                  <h3>Ask <span class="policy-badge">default</span></h3>
+                  <p>Read-only calls proceed. Every write or command waits for your answer in the Approvals view.</p>
+                </div>
+                <ul class="tier-list">
+                  <li data-tier="readonly"><span class="tier-name">Read-only</span><span class="tier-desc">reads and listings</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="low"><span class="tier-name">Low</span><span class="tier-desc">reversible writes in the workspace</span><span class="tier-state is-ask">Asks</span></li>
+                  <li data-tier="medium"><span class="tier-name">Medium</span><span class="tier-desc">ordinary command execution</span><span class="tier-state is-ask">Asks</span></li>
+                  <li data-tier="high"><span class="tier-name">High</span><span class="tier-desc">deletion, force-push, outside the workspace</span><span class="tier-state is-ask">Asks</span></li>
+                  <li data-tier="critical"><span class="tier-name">Critical</span><span class="tier-desc">system damage or sandbox bypass</span><span class="tier-state is-deny">Denied</span></li>
+                </ul>
+              </div>
+
+              <div class="policy-panel" role="tabpanel" id="panel-safe" aria-labelledby="tab-safe" data-panel="safe" hidden>
+                <div class="policy-copy">
+                  <h3>SafeAuto</h3>
+                  <p>Routine reads and in-workspace writes run automatically. Execution and anything riskier still asks.</p>
+                </div>
+                <ul class="tier-list">
+                  <li data-tier="readonly"><span class="tier-name">Read-only</span><span class="tier-desc">reads and listings</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="low"><span class="tier-name">Low</span><span class="tier-desc">reversible writes in the workspace</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="medium"><span class="tier-name">Medium</span><span class="tier-desc">ordinary command execution</span><span class="tier-state is-ask">Asks</span></li>
+                  <li data-tier="high"><span class="tier-name">High</span><span class="tier-desc">deletion, force-push, outside the workspace</span><span class="tier-state is-ask">Asks</span></li>
+                  <li data-tier="critical"><span class="tier-name">Critical</span><span class="tier-desc">system damage or sandbox bypass</span><span class="tier-state is-deny">Denied</span></li>
+                </ul>
+              </div>
+
+              <div class="policy-panel" role="tabpanel" id="panel-plan" aria-labelledby="tab-plan" data-panel="plan" hidden>
+                <div class="policy-copy">
+                  <h3>PlanOnly</h3>
+                  <p>A hard read-only boundary. Agents may plan and read, but every write and every execution is denied.</p>
+                </div>
+                <ul class="tier-list">
+                  <li data-tier="readonly"><span class="tier-name">Read-only</span><span class="tier-desc">reads and listings</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="low"><span class="tier-name">Low</span><span class="tier-desc">reversible writes in the workspace</span><span class="tier-state is-deny">Denied</span></li>
+                  <li data-tier="medium"><span class="tier-name">Medium</span><span class="tier-desc">ordinary command execution</span><span class="tier-state is-deny">Denied</span></li>
+                  <li data-tier="high"><span class="tier-name">High</span><span class="tier-desc">deletion, force-push, outside the workspace</span><span class="tier-state is-deny">Denied</span></li>
+                  <li data-tier="critical"><span class="tier-name">Critical</span><span class="tier-desc">system damage or sandbox bypass</span><span class="tier-state is-deny">Denied</span></li>
+                </ul>
+              </div>
+
+              <div class="policy-panel" role="tabpanel" id="panel-trusted" aria-labelledby="tab-trusted" data-panel="trusted" hidden>
+                <div class="policy-copy">
+                  <h3>Trusted</h3>
+                  <p>Everything except critical risk runs unattended. Critical commands are still denied in this version.</p>
+                </div>
+                <ul class="tier-list">
+                  <li data-tier="readonly"><span class="tier-name">Read-only</span><span class="tier-desc">reads and listings</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="low"><span class="tier-name">Low</span><span class="tier-desc">reversible writes in the workspace</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="medium"><span class="tier-name">Medium</span><span class="tier-desc">ordinary command execution</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="high"><span class="tier-name">High</span><span class="tier-desc">deletion, force-push, outside the workspace</span><span class="tier-state is-auto">Runs</span></li>
+                  <li data-tier="critical"><span class="tier-name">Critical</span><span class="tier-desc">system damage or sandbox bypass</span><span class="tier-state is-deny">Denied</span></li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <p class="download-foot">
+            Policies govern tool use, not the operating system. The subprocess
+            backend runs commands with your user's permissions — see
+            <a href="https://github.com/BerryUIKI/CowBot/blob/dev/SECURITY.md">Security</a>.
+          </p>
+        </div>
+      </section>
+
       <section class="section section-rule" id="architecture">
         <div class="wrap architecture-grid">
           <div class="architecture-copy">
@@ -313,6 +452,151 @@
 <span class="prompt">$</span> cargo run -p cowbot-cli -- run \
     --task "Plan a REST API for a task tracker" \
     --dry-run</code></pre>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-rule" id="workspace">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Four views, one local workspace.</h2>
+            <p>
+              The desktop app never touches SQLite directly. Each view talks to
+              the same client the CLI uses.
+            </p>
+          </div>
+          <div class="views" data-reveal-group>
+            <article class="view-cell" data-reveal>
+              <h3>Channels</h3>
+              <p>Create a channel, read the timeline, and post with mentions so agents pick up the thread.</p>
+            </article>
+            <article class="view-cell" data-reveal>
+              <h3>Tasks</h3>
+              <p>Create a task with a starter team, watch assignments and events, cancel, or start a crew run.</p>
+            </article>
+            <article class="view-cell" data-reveal>
+              <h3>Approvals</h3>
+              <p>Pending tool calls with the command, its risk tier, and the acting assignment. Approve or reject.</p>
+            </article>
+            <article class="view-cell" data-reveal>
+              <h3>Settings</h3>
+              <p>Providers, agents, templates, workspaces, and updates — including import and export of workspaces.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-rule" id="roadmap">
+        <div class="wrap roadmap-grid">
+          <div class="roadmap-copy">
+            <h2>Where this is going.</h2>
+            <p>
+              Phase 1 is complete and ships today. The next phases are planned,
+              not built — nothing here is a promise about a date.
+            </p>
+            <p class="link-row">
+              <a href="https://github.com/BerryUIKI/CowBot/blob/dev/docs/ROADMAP.md">Read the roadmap</a>
+            </p>
+            <ol class="phase-track" data-reveal-group>
+              <li class="phase is-current" data-reveal>
+                <span class="phase-mark" aria-hidden="true"></span>
+                <div>
+                  <h3>Phase 1 · Local MVP</h3>
+                  <p>Desktop app, CLI, crews, approvals, persistence, packages, updates.</p>
+                </div>
+                <span class="phase-status">Shipped</span>
+              </li>
+              <li class="phase" data-reveal>
+                <span class="phase-mark" aria-hidden="true"></span>
+                <div>
+                  <h3>Phase 2 · Self-hosted teams</h3>
+                  <p>Server API, accounts and roles, remote client, Docker deployment.</p>
+                </div>
+                <span class="phase-status">Planned</span>
+              </li>
+              <li class="phase" data-reveal>
+                <span class="phase-mark" aria-hidden="true"></span>
+                <div>
+                  <h3>Phase 3 · Ecosystem</h3>
+                  <p>Docker sandbox, long-term memory, integrations, plugins, MCP.</p>
+                </div>
+                <span class="phase-status">Planned</span>
+              </li>
+            </ol>
+          </div>
+          <figure class="figure figure-tall">
+            <picture>
+              <source media="(prefers-color-scheme: dark)" srcset="docs/assets/workspace-concept.svg" />
+              <img
+                src="docs/assets/workspace-concept-light.svg"
+                alt="Illustrative CowBot workspace: channels on the left, a discussion with Planner and Coder in the center, a task pipeline on the right, and an approval card."
+                width="1200"
+                height="760"
+                loading="lazy"
+              />
+            </picture>
+            <figcaption>Concept layout, not a screenshot — the shipped shell is close in spirit.</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section class="section section-rule" id="faq">
+        <div class="wrap faq-grid">
+          <div class="faq-head">
+            <h2>Questions people ask first.</h2>
+            <p>Short answers, with links to the documents that go deeper.</p>
+          </div>
+          <div class="faq">
+            <details>
+              <summary>Does CowBot send my data anywhere?</summary>
+              <p>
+                Only the model request goes to the endpoint you configure, plus
+                one update check against GitHub at launch if you leave it on.
+                Messages, tasks, approvals, and run history stay in local
+                SQLite.
+              </p>
+            </details>
+            <details>
+              <summary>Which models can I use?</summary>
+              <p>
+                Any endpoint speaking OpenAI Chat Completions, Anthropic
+                Messages, or OpenAI Responses — OpenAI, DeepSeek, Ollama,
+                OpenRouter, Claude relays, and custom URLs. Without a provider,
+                CowBot uses the offline mock model.
+              </p>
+            </details>
+            <details>
+              <summary>Is this a sandbox?</summary>
+              <p>
+                Not an OS-level one. Tools run as your user with timeouts and
+                output limits; approval policies decide what runs at all. Docker
+                and WASM sandbox backends are planned for Phase 3.
+              </p>
+            </details>
+            <details>
+              <summary>Why do my downloads look unsigned?</summary>
+              <p>
+                Builds are not code-signed yet. macOS may ask you to allow the
+                app in System Settings, and Windows may show SmartScreen. The
+                in-app updater verifies update signatures on every release.
+              </p>
+            </details>
+            <details>
+              <summary>How do I move a workspace to another machine?</summary>
+              <p>
+                Export it as a <code>.cowpkg</code> package from Settings or the
+                CLI, then import it on the other machine. Import always creates
+                a new workspace and never overwrites an existing one.
+              </p>
+            </details>
+            <details>
+              <summary>Can I contribute?</summary>
+              <p>
+                Yes. Branch from <code>dev</code> as <code>feature/&lt;name&gt;</code>,
+                keep commits small, and open a pull request. See the
+                contribution guide and the code of conduct.
+              </p>
+            </details>
           </div>
         </div>
       </section>

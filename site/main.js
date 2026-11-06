@@ -129,8 +129,122 @@ function wireCopy() {
   });
 }
 
+function wireReveals() {
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const targets = document.querySelectorAll("[data-reveal]");
+  if (!targets.length) return;
+  if (reduce || !("IntersectionObserver" in window)) {
+    targets.forEach((node) => node.classList.add("is-visible"));
+    return;
+  }
+  document.documentElement.classList.add("reveal-ready");
+  const pending = new Set(targets);
+  const observer = new IntersectionObserver(
+    () => {
+      const limit = window.innerHeight * 0.96;
+      pending.forEach((node) => {
+        const { top, bottom } = node.getBoundingClientRect();
+        if (bottom > 0 && top < limit) {
+          node.classList.add("is-visible");
+          pending.delete(node);
+          observer.unobserve(node);
+        }
+      });
+    },
+    { rootMargin: "0px 0px -8% 0px", threshold: 0 }
+  );
+  targets.forEach((node) => observer.observe(node));
+  setTimeout(() => {
+    if (!document.querySelector("[data-reveal].is-visible")) {
+      document.documentElement.classList.remove("reveal-ready");
+      targets.forEach((node) => observer.unobserve(node));
+    }
+  }, 1500);
+}
+
+function wirePolicyTabs() {
+  const tabs = [...document.querySelectorAll(".policy-tab")];
+  const panels = [...document.querySelectorAll(".policy-panel")];
+  if (!tabs.length || !panels.length) return;
+
+  function select(tab) {
+    tabs.forEach((node) => {
+      const active = node === tab;
+      node.setAttribute("aria-selected", String(active));
+      node.tabIndex = active ? 0 : -1;
+    });
+    panels.forEach((panel) => {
+      panel.hidden = panel.dataset.panel !== tab.dataset.policy;
+    });
+  }
+
+  tabs.forEach((tab, index) => {
+    tab.addEventListener("click", () => select(tab));
+    tab.addEventListener("keydown", (event) => {
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : 0;
+      if (!step) return;
+      event.preventDefault();
+      const next = tabs[(index + step + tabs.length) % tabs.length];
+      select(next);
+      next.focus();
+    });
+  });
+}
+
+function wireThemeToggle() {
+  const button = document.getElementById("theme-toggle");
+  const label = button?.querySelector(".theme-label");
+  if (!button) return;
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+  const current = () =>
+    document.documentElement.dataset.theme || (media.matches ? "dark" : "light");
+
+  function sync() {
+    const dark = current() === "dark";
+    button.setAttribute("aria-pressed", String(dark));
+    if (label) label.textContent = dark ? "Light" : "Dark";
+    button.title = dark ? "Switch to light mode" : "Switch to dark mode";
+  }
+
+  button.addEventListener("click", () => {
+    document.documentElement.dataset.theme = current() === "dark" ? "light" : "dark";
+    sync();
+  });
+
+  media.addEventListener("change", () => {
+    if (!document.documentElement.dataset.theme) sync();
+  });
+
+  sync();
+}
+
+function wireDemoParallax() {
+  const demo = document.querySelector(".demo");
+  if (!demo || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  if (window.matchMedia("(pointer: coarse)").matches) return;
+  let frame = 0;
+  demo.addEventListener("pointermove", (event) => {
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const rect = demo.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width - 0.5;
+      const y = (event.clientY - rect.top) / rect.height - 0.5;
+      demo.style.transform = `perspective(900px) rotateX(${(-y * 2).toFixed(2)}deg) rotateY(${(x * 2.5).toFixed(2)}deg)`;
+    });
+  });
+  demo.addEventListener("pointerleave", () => {
+    demo.style.transform = "";
+  });
+}
+
 const platform = detectPlatform();
 setHeroLabel(platform);
 wireApproval();
 wireCopy();
+wireReveals();
+wirePolicyTabs();
+wireThemeToggle();
+wireDemoParallax();
 loadLatestRelease();
