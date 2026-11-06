@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand, ValueEnum};
-use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
+use cowbot_agent::{AgentInstance, Crew, StandardRoles};
 use cowbot_client::{Client, LocalClient};
 use cowbot_core::approval::ApprovalLevel;
 use cowbot_core::event::EventPayload;
@@ -18,7 +18,7 @@ use tracing_subscriber::FmtSubscriber;
 #[derive(Parser)]
 #[command(name = "cowbot")]
 #[command(author = "CowBot Contributors")]
-#[command(version = "0.1.1")]
+#[command(version = "0.1.2")]
 #[command(about = "CowBot: High-performance Multi-Agent Collaboration Platform in Rust", long_about = None)]
 struct Cli {
     #[arg(short, long, global = true)]
@@ -339,7 +339,7 @@ async fn run_crew(
     let reviewer_id = reviewer_profile.id.clone();
     let reviewer = AgentInstance::new(reviewer_profile, llm.clone(), tools.clone(), &model);
 
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(planner);
     crew.add_agent(coder);
     crew.add_agent(reviewer);

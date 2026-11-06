@@ -11,7 +11,6 @@ use crate::types::{
 };
 use async_trait::async_trait;
 use cowbot_core::error::{CowError, CowResult};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{json, Value};
 use tracing::{debug, error};
 
@@ -35,19 +34,6 @@ impl ResponsesProvider {
     fn responses_url(&self) -> String {
         endpoint_url(&self.base_url, "/responses")
     }
-}
-
-fn auth_headers(api_key: Option<&str>) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    if let Some(key) = api_key {
-        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
-            headers.insert(AUTHORIZATION, value);
-        }
-    }
-
-    headers
 }
 
 /// Convert the internal chat history into Responses `input` items.
@@ -210,11 +196,12 @@ impl LlmProvider for ResponsesProvider {
         let url = self.responses_url();
         debug!(url = %url, model = %request.model, "Dispatching OpenAI responses request");
 
-        let response = self
-            .client
-            .post(&url)
-            .headers(auth_headers(self.api_key.as_deref()))
-            .json(&request_body(request))
+        let mut http = self.client.post(&url).json(&request_body(request));
+        if let Some(key) = &self.api_key {
+            http = http.bearer_auth(key);
+        }
+
+        let response = http
             .send()
             .await
             .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;

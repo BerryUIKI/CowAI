@@ -173,8 +173,8 @@ impl Store {
         .bind(&task.description)
         .bind(&task.expected_output)
         .bind(task.assigned_agent.as_ref().map(|agent| agent.0.clone()))
-        .bind(serde_json::to_string(&task.context_tasks).map_err(CowError::from)?)
-        .bind(serde_json::to_string(&task.status).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&task.context_tasks)?)
+        .bind(serde_json::to_string(&task.status)?)
         .bind(&now)
         .bind(&now)
         .execute(self.pool())
@@ -197,7 +197,7 @@ impl Store {
 
     pub async fn update_task_status(&self, id: &TaskId, status: &TaskStatus) -> CowResult<()> {
         sqlx::query("UPDATE tasks SET status = ?, updated_at = ? WHERE id = ?")
-            .bind(serde_json::to_string(status).map_err(CowError::from)?)
+            .bind(serde_json::to_string(status)?)
             .bind(Utc::now().to_rfc3339())
             .bind(&id.0)
             .execute(self.pool())
@@ -285,13 +285,12 @@ impl Store {
         .bind(&call.id)
         .bind(&call.run_id.0)
         .bind(&call.name)
-        .bind(serde_json::to_string(&call.arguments).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&call.arguments)?)
         .bind(
             call.result
                 .as_ref()
                 .map(serde_json::to_string)
-                .transpose()
-                .map_err(CowError::from)?,
+                .transpose()?,
         )
         .bind(&call.approved_by)
         .bind(call.created_at.to_rfc3339())
@@ -308,7 +307,7 @@ impl Store {
         approved_by: Option<&str>,
     ) -> CowResult<()> {
         sqlx::query("UPDATE tool_calls SET result = ?, approved_by = ? WHERE id = ?")
-            .bind(serde_json::to_string(result).map_err(CowError::from)?)
+            .bind(serde_json::to_string(result)?)
             .bind(approved_by)
             .bind(id)
             .execute(self.pool())

@@ -22,11 +22,6 @@ impl SubprocessSandbox {
             max_output_bytes: 1024 * 1024, // 1MB output limit
         }
     }
-
-    pub fn with_max_output_bytes(mut self, max: usize) -> Self {
-        self.max_output_bytes = max;
-        self
-    }
 }
 
 impl Default for SubprocessSandbox {
@@ -86,22 +81,10 @@ impl SandboxBackend for SubprocessSandbox {
                 let stdout = String::from_utf8_lossy(&output.stdout);
                 let stderr = String::from_utf8_lossy(&output.stderr);
 
-                let stdout_truncated = if stdout.len() > self.max_output_bytes {
-                    format!("{}... [Output truncated]", &stdout[..self.max_output_bytes])
-                } else {
-                    stdout.to_string()
-                };
-
-                let stderr_truncated = if stderr.len() > self.max_output_bytes {
-                    format!("{}... [Output truncated]", &stderr[..self.max_output_bytes])
-                } else {
-                    stderr.to_string()
-                };
-
                 Ok(ExecutionResult {
                     exit_code: output.status.code(),
-                    stdout: stdout_truncated,
-                    stderr: stderr_truncated,
+                    stdout: truncate_output(&stdout, self.max_output_bytes),
+                    stderr: truncate_output(&stderr, self.max_output_bytes),
                     duration_ms: elapsed,
                     timed_out: false,
                 })
@@ -124,5 +107,34 @@ impl SandboxBackend for SubprocessSandbox {
                 })
             }
         }
+    }
+}
+
+fn truncate_output(text: &str, max: usize) -> String {
+    if text.len() <= max {
+        return text.to_string();
+    }
+    let mut end = max;
+    while !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    format!("{}... [Output truncated]", &text[..end])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_output;
+
+    #[test]
+    fn truncation_keeps_short_output() {
+        assert_eq!(truncate_output("hello", 10), "hello");
+    }
+
+    #[test]
+    fn truncation_respects_utf8_boundaries() {
+        // "你好" is six bytes; a five-byte limit must not split the second character.
+        let truncated = truncate_output("你好", 5);
+
+        assert_eq!(truncated, "你... [Output truncated]");
     }
 }

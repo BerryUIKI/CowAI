@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
+use cowbot_agent::{AgentInstance, Crew, StandardRoles};
 use cowbot_bus::EventBus;
 use cowbot_core::approval::{ApprovalLevel, ApprovalStatus};
 use cowbot_core::assignment::{
@@ -55,7 +55,7 @@ async fn crew_runner_executes_tasks_through_assignments() {
     let coder_profile = StandardRoles::coder();
     let coder_id = coder_profile.id.clone();
 
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(AgentInstance::new(
         planner_profile,
         llm.clone(),
@@ -143,7 +143,7 @@ async fn failed_task_leaves_a_failed_run() {
         finish_reason: Some("tool_calls".to_string()),
     }]));
 
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(AgentInstance::new(
         profile,
         llm,
@@ -205,7 +205,7 @@ async fn crew_runner_records_tool_calls() {
 
     let profile = StandardRoles::coder();
     let agent_id = profile.id.clone();
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(AgentInstance::new(profile, llm, tools, "mock-model"));
 
     let task = Task::new("Call the echo tool", "Echoed output").assign_to(agent_id);
@@ -268,7 +268,7 @@ async fn crew_runner_records_the_human_approver() {
 
     let profile = StandardRoles::coder();
     let agent_id = profile.id.clone();
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(AgentInstance::new(profile, llm, tools, "mock-model"));
 
     let task = Task::new("Approve the echo tool", "Echoed output").assign_to(agent_id);

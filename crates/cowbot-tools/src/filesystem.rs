@@ -5,18 +5,13 @@ use serde_json::json;
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
-/// Helper to ensure path does not escape a designated workspace sandbox directory.
-fn sanitize_path(base_dir: Option<&Path>, path_str: &str) -> Result<PathBuf, CowError> {
-    let raw_path = PathBuf::from(path_str);
-    if let Some(base) = base_dir {
-        let combined = if raw_path.is_absolute() {
-            raw_path
-        } else {
-            base.join(raw_path)
-        };
-        Ok(combined)
-    } else {
-        Ok(raw_path)
+/// Resolve a tool path against the configured base directory.
+///
+/// This is path resolution, not sandboxing: absolute paths are returned as-is.
+fn resolve_path(base_dir: Option<&Path>, path_str: &str) -> PathBuf {
+    match base_dir {
+        Some(base) => base.join(path_str),
+        None => PathBuf::from(path_str),
     }
 }
 
@@ -63,7 +58,7 @@ impl Tool for ReadFileTool {
                 message: "Missing 'path' argument".to_string(),
             })?;
 
-        let path = sanitize_path(self.base_dir.as_deref(), path_str)?;
+        let path = resolve_path(self.base_dir.as_deref(), path_str);
         match fs::read_to_string(&path).await {
             Ok(content) => Ok(ToolResult::success(&call.id, content)),
             Err(e) => Ok(ToolResult::failure(
@@ -130,7 +125,7 @@ impl Tool for WriteFileTool {
                 message: "Missing 'content' argument".to_string(),
             })?;
 
-        let path = sanitize_path(self.base_dir.as_deref(), path_str)?;
+        let path = resolve_path(self.base_dir.as_deref(), path_str);
         if let Some(parent) = path.parent() {
             let _ = fs::create_dir_all(parent).await;
         }

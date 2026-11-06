@@ -107,8 +107,7 @@ impl ApprovalService {
             ApprovalDecision::RequireApproval => {
                 let approval = Approval::new(assignment.task_id.clone(), call.id.clone());
                 self.store.create_approval(&approval).await?;
-                let _ = self
-                    .bus
+                self.bus
                     .publish(Event::new(EventPayload::ApprovalRequested {
                         approval: approval.clone(),
                         risk: assessment.level,
@@ -144,17 +143,13 @@ impl ApprovalService {
                             reason: format!("approval rejected by {decided_by}"),
                         })
                     }
-                    ApprovalStatus::Expired => {
+                    ApprovalStatus::Expired | ApprovalStatus::Pending => {
                         self.record_audit("system", "tool.approval_expired", call, &assessment)
                             .await?;
                         Ok(ToolAuthorization::Denied {
                             reason: "approval expired without a decision".to_string(),
                         })
                     }
-                    ApprovalStatus::Pending => Err(CowError::Task(format!(
-                        "approval '{}' remained pending after its timeout",
-                        approval.id
-                    ))),
                 }
             }
         }
@@ -179,7 +174,7 @@ impl ApprovalService {
             .get_approval(approval_id)
             .await?
             .ok_or_else(|| CowError::Task(format!("approval '{approval_id}' was not found")))?;
-        let _ = self.bus.publish(Event::new(EventPayload::ApprovalDecided {
+        self.bus.publish(Event::new(EventPayload::ApprovalDecided {
             approval: approval.clone(),
         }));
         let action = if status == ApprovalStatus::Approved {
@@ -273,7 +268,7 @@ impl ApprovalService {
                 let expired = self.store.get_approval(approval_id).await?.ok_or_else(|| {
                     CowError::Task(format!("approval '{approval_id}' was not found"))
                 })?;
-                let _ = self.bus.publish(Event::new(EventPayload::ApprovalDecided {
+                self.bus.publish(Event::new(EventPayload::ApprovalDecided {
                     approval: expired.clone(),
                 }));
                 Ok(expired)

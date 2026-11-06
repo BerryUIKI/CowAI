@@ -3,7 +3,7 @@ pub mod crew;
 pub mod roles;
 
 pub use agent::AgentInstance;
-pub use crew::{Crew, ProcessType};
+pub use crew::Crew;
 pub use roles::StandardRoles;
 
 #[cfg(test)]
@@ -63,7 +63,7 @@ mod tests {
         let coder =
             AgentInstance::new(coder_profile, mock_llm.clone(), tools.clone(), "mock-model");
 
-        let mut crew = Crew::new(ProcessType::Sequential);
+        let mut crew = Crew::new();
         crew.add_agent(planner);
         crew.add_agent(coder);
 

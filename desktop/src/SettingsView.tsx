@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import ModelProviderSettings from "./ModelProviderSettings";
+import UpdateProgress from "./UpdateProgress";
+import { errorMessage } from "./errors";
+import { formatDateTime } from "./format";
 import {
   createWorkspace,
   exportWorkspace,
@@ -15,6 +19,7 @@ import type {
   TemplateDocument,
   WorkspaceSummary,
 } from "./types";
+import type { Updater } from "./updater";
 
 interface SettingsViewProps {
   session: ClientSession | null;
@@ -22,16 +27,19 @@ interface SettingsViewProps {
   templates: TemplateDocument[];
   templateId: string;
   busy: string | null;
+  updater: Updater;
+  tasksRunning: boolean;
   onSelectTemplate: (templateId: string) => void;
   onAddAgents: () => void;
 }
 
-type SettingsSection = "model" | "team" | "workspace";
+type SettingsSection = "model" | "team" | "workspace" | "about";
 
 const sections: { id: SettingsSection; label: string }[] = [
   { id: "model", label: "Model" },
   { id: "team", label: "Team" },
   { id: "workspace", label: "Workspace" },
+  { id: "about", label: "About" },
 ];
 
 function agentInitials(name: string): string {
@@ -43,16 +51,26 @@ function agentInitials(name: string): string {
     .join("");
 }
 
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Try again.";
-}
-
 function packageFileName(name: string | undefined): string {
   const base =
     (name ?? "workspace").trim().replace(/[\\/:*?"<>|]+/g, "-") || "workspace";
   return base.toLowerCase().endsWith(".cowpkg") ? base : `${base}.cowpkg`;
+}
+
+function releaseUrl(version: string): string {
+  return `https://github.com/BerryUIKI/CowBot/releases/tag/v${version.replace(/^v/, "")}`;
+}
+
+function releaseDate(value: string | null): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? "—"
+    : date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
 }
 
 export default function SettingsView({
@@ -61,6 +79,8 @@ export default function SettingsView({
   templates,
   templateId,
   busy,
+  updater,
+  tasksRunning,
   onSelectTemplate,
   onAddAgents,
 }: SettingsViewProps) {
@@ -70,6 +90,7 @@ export default function SettingsView({
   const [workspaceError, setWorkspaceError] = useState<string | null>(null);
   const [workspaceNotice, setWorkspaceNotice] = useState<string | null>(null);
   const [newWorkspaceName, setNewWorkspaceName] = useState("");
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -436,6 +457,172 @@ export default function SettingsView({
                 </div>
               </section>
             </>
+          ) : null}
+
+          {section === "about" ? (
+            <section className="settings-section" aria-labelledby="settings-about">
+              <div className="settings-section-head">
+                <h3 id="settings-about">About CowBot</h3>
+                <p className="settings-hint">
+                  Desktop version and updates. CowBot checks GitHub Releases for
+                  stable versions.
+                </p>
+              </div>
+
+              <dl className="settings-meta">
+                <div>
+                  <dt>Version</dt>
+                  <dd>{updater.state.currentVersion ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt>Update channel</dt>
+                  <dd>Stable · GitHub Releases</dd>
+                </div>
+                <div>
+                  <dt>Last checked</dt>
+                  <dd>
+                    {updater.state.checkedAt
+                      ? formatDateTime(updater.state.checkedAt)
+                      : "Not checked yet"}
+                  </dd>
+                </div>
+              </dl>
+
+              <label className="settings-checkbox about-toggle">
+                <input
+                  type="checkbox"
+                  checked={updater.autoCheck}
+                  onChange={(event) => {
+                    setUpdateError(null);
+                    updater.setAutoCheck(event.target.checked).catch((error) => {
+                      setUpdateError(errorMessage(error));
+                    });
+                  }}
+                />
+                Check for updates automatically when CowBot starts
+              </label>
+
+              {updateError ? (
+                <p className="settings-status is-error" role="alert">
+                  {updateError}
+                </p>
+              ) : null}
+
+              <div className="form-actions about-actions">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setUpdateError(null);
+                    void updater.check();
+                  }}
+                  disabled={
+                    updater.state.phase === "checking" ||
+                    updater.state.phase === "downloading"
+                  }
+                >
+                  {updater.state.phase === "checking"
+                    ? "Checking…"
+                    : "Check for updates"}
+                </button>
+
+                {updater.state.phase === "available" ||
+                (updater.state.phase === "error" &&
+                  updater.state.version !== null) ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => void updater.install()}
+                    disabled={tasksRunning}
+                  >
+                    Download and install
+                  </button>
+                ) : null}
+
+                {updater.state.phase === "ready" ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => void updater.restart()}
+                  >
+                    Restart now
+                  </button>
+                ) : null}
+
+                {updater.state.version ? (
+                  <button
+                    type="button"
+                    className="ghost-button"
+                    onClick={() => {
+                      setUpdateError(null);
+                      openUrl(releaseUrl(updater.state.version ?? "")).catch(
+                        (error) => {
+                          setUpdateError(errorMessage(error));
+                        },
+                      );
+                    }}
+                  >
+                    View release notes
+                  </button>
+                ) : null}
+              </div>
+
+              {updater.state.phase === "checking" ? (
+                <p className="settings-status" role="status">
+                  Checking GitHub Releases…
+                </p>
+              ) : null}
+
+              {updater.state.phase === "current" ? (
+                <p className="settings-status is-ok" role="status">
+                  CowBot is up to date.
+                </p>
+              ) : null}
+
+              {updater.state.phase === "available" ? (
+                <p className="settings-status is-ok" role="status">
+                  Version {updater.state.version} is available
+                  {updater.state.date
+                    ? ` (released ${releaseDate(updater.state.date)})`
+                    : ""}
+                  .
+                  {tasksRunning
+                    ? " Finish running tasks before installing."
+                    : ""}
+                </p>
+              ) : null}
+
+              {updater.state.phase === "downloading" ? (
+                <UpdateProgress
+                  className="settings-update-progress"
+                  downloaded={updater.state.downloaded}
+                  total={updater.state.total}
+                />
+              ) : null}
+
+              {updater.state.phase === "ready" ? (
+                <p className="settings-status is-ok" role="status">
+                  Installed. Restart CowBot to finish updating.
+                </p>
+              ) : null}
+
+              {updater.state.phase === "error" && updater.state.error ? (
+                <p className="settings-status is-error" role="alert">
+                  {updater.state.version
+                    ? `Update failed: ${updater.state.error}`
+                    : `Could not check for updates: ${updater.state.error}`}
+                </p>
+              ) : null}
+
+              <p className="settings-note">
+                Automatic updates work for the NSIS installer on Windows, the app
+                installed from the DMG on macOS, and the AppImage on Linux. MSI
+                and deb installs update by downloading a new release. Builds are
+                unsigned, so macOS may ask you to allow CowBot again after an
+                update. When enabled, CowBot makes one request to GitHub at
+                startup; no workspace data is sent.
+              </p>
+            </section>
           ) : null}
         </div>
       </div>

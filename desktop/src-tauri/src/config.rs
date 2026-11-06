@@ -19,9 +19,6 @@ use serde::{Deserialize, Serialize};
 /// File name of the desktop configuration inside the app data directory.
 pub const CONFIG_FILE: &str = "config.json";
 
-/// Format version written by this build.
-pub const CONFIG_VERSION: u32 = 1;
-
 /// Default model shown when no provider is active.
 pub const DEFAULT_MODEL: &str = "gpt-4o";
 
@@ -72,8 +69,6 @@ pub struct ProviderConfig {
 /// Whole desktop configuration file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "current_version")]
-    pub version: u32,
     #[serde(default)]
     pub active_provider_id: Option<String>,
     #[serde(default)]
@@ -84,6 +79,9 @@ pub struct AppConfig {
     /// so an upgrade does not show the guide to an existing user.
     #[serde(default = "onboarding_default_for_legacy")]
     pub onboarding_completed: bool,
+    /// Whether the desktop checks GitHub Releases for a newer version at startup.
+    #[serde(default = "auto_check_default")]
+    pub auto_check_updates: bool,
     /// Database file (relative to the app data directory) the desktop opens.
     #[serde(default)]
     pub active_workspace_database: Option<String>,
@@ -92,21 +90,21 @@ pub struct AppConfig {
     pub workspaces: Vec<WorkspaceEntry>,
 }
 
-fn current_version() -> u32 {
-    CONFIG_VERSION
+fn onboarding_default_for_legacy() -> bool {
+    true
 }
 
-fn onboarding_default_for_legacy() -> bool {
+fn auto_check_default() -> bool {
     true
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: CONFIG_VERSION,
             active_provider_id: None,
             providers: Vec::new(),
             onboarding_completed: false,
+            auto_check_updates: true,
             active_workspace_database: None,
             workspaces: Vec::new(),
         }
@@ -358,6 +356,7 @@ mod tests {
         assert!(config.providers.is_empty());
         assert!(config.active_provider_id.is_none());
         assert!(!config.onboarding_completed);
+        assert!(config.auto_check_updates);
     }
 
     #[test]
@@ -387,14 +386,36 @@ mod tests {
     }
 
     #[test]
+    fn legacy_config_files_enable_update_checks() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(&path, r#"{"version":1,"providers":[]}"#).unwrap();
+
+        assert!(load(&path).unwrap().auto_check_updates);
+    }
+
+    #[test]
+    fn explicit_update_preference_is_preserved() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"providers":[],"auto_check_updates":false}"#,
+        )
+        .unwrap();
+
+        assert!(!load(&path).unwrap().auto_check_updates);
+    }
+
+    #[test]
     fn save_and_load_roundtrip() {
         let root = tempfile::tempdir().unwrap();
         let path = config_path(root.path());
         let config = AppConfig {
-            version: CONFIG_VERSION,
             active_provider_id: Some("one".to_string()),
             providers: vec![sample_provider("one", "Example")],
             onboarding_completed: true,
+            auto_check_updates: true,
             active_workspace_database: Some("workspaces/one.db".to_string()),
             workspaces: vec![WorkspaceEntry {
                 database: "workspaces/one.db".to_string(),

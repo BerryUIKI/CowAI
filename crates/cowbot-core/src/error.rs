@@ -15,9 +15,6 @@ pub enum CowError {
     #[error("Tool '{0}' not found")]
     ToolNotFound(String),
 
-    #[error("Event bus error: {0}")]
-    Bus(String),
-
     #[error("LLM provider error: {0}")]
     Llm(String),
 
@@ -26,9 +23,6 @@ pub enum CowError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
-
-    #[error("Channel or collaboration error: {0}")]
-    Collaboration(String),
 
     #[error("Configuration error: {0}")]
     Config(String),

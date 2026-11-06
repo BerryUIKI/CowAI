@@ -315,7 +315,7 @@ impl Store {
         .bind(&token.user_id.0)
         .bind(&token.workspace_id.0)
         .bind(&token.token_hash)
-        .bind(serde_json::to_string(&token.scopes).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&token.scopes)?)
         .bind(token.revoked_at.map(|value| value.to_rfc3339()))
         .execute(self.pool())
         .await

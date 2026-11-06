@@ -2,7 +2,6 @@ use crate::provider::LlmProvider;
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse, LlmToolCall};
 use async_trait::async_trait;
 use cowbot_core::error::{CowError, CowResult};
-use reqwest::header::{HeaderMap, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{debug, error};
@@ -89,15 +88,6 @@ impl LlmProvider for OpenAiCompatibleProvider {
     ) -> CowResult<ChatCompletionResponse> {
         let url = format!("{}/chat/completions", self.base_url);
 
-        let mut headers = HeaderMap::new();
-        headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-        if let Some(key) = &self.api_key {
-            let auth_val = format!("Bearer {}", key);
-            if let Ok(hv) = HeaderValue::from_str(&auth_val) {
-                headers.insert(AUTHORIZATION, hv);
-            }
-        }
-
         // Format tools in OpenAI JSON schema format
         let tools: Vec<serde_json::Value> = request
             .tools
@@ -123,11 +113,12 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         debug!(url = %url, model = %request.model, "Dispatching chat completion request");
 
-        let response = self
-            .client
-            .post(&url)
-            .headers(headers)
-            .json(&req_body)
+        let mut http = self.client.post(&url).json(&req_body);
+        if let Some(key) = &self.api_key {
+            http = http.bearer_auth(key);
+        }
+
+        let response = http
             .send()
             .await
             .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
