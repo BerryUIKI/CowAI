@@ -260,7 +260,7 @@ impl Store {
         .bind(assignment.depth as i64)
         .bind(&assignment.task_id.0)
         .bind(origin_to_str(assignment.origin))
-        .bind(serde_json::to_string(&assignment.requester).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&assignment.requester)?)
         .bind(&assignment.assignee.0)
         .bind(mode_to_str(assignment.mode))
         .bind(reply_to_str(assignment.reply))
@@ -277,8 +277,7 @@ impl Store {
                 .outcome
                 .as_ref()
                 .map(serde_json::to_string)
-                .transpose()
-                .map_err(CowError::from)?,
+                .transpose()?,
         )
         .bind(assignment.stall_strikes as i64)
         .bind(assignment.repeated_errors as i64)
@@ -403,8 +402,7 @@ impl Store {
                 .outcome
                 .as_ref()
                 .map(serde_json::to_string)
-                .transpose()
-                .map_err(CowError::from)?,
+                .transpose()?,
         )
         .bind(assignment.stall_strikes as i64)
         .bind(assignment.repeated_errors as i64)

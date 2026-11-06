@@ -1,12 +1,7 @@
 use std::collections::BTreeMap;
 use std::io::Write;
 
-use cowbot_core::agent::AgentProfile;
-use cowbot_core::audit::AuditEvent;
-use cowbot_core::channel::{Channel, ChannelMessage};
 use cowbot_core::identity::{Workspace, WorkspaceId};
-use cowbot_core::run::Run;
-use cowbot_core::task::Task;
 use cowbot_core::template::TemplateDocument;
 use cowbot_store::Store;
 use sha2::{Digest, Sha256};
@@ -34,15 +29,12 @@ pub async fn export_workspace(
     let workspace = store.get_workspace(workspace_id).await?.ok_or_else(|| {
         PackageError::Invalid(format!("workspace '{workspace_id:?}' was not found"))
     })?;
-    let owner = store
+    let owner_id = store
         .list_members(workspace_id)
         .await?
         .into_iter()
         .next()
-        .map(|membership| {
-            let id = membership.user_id.0.clone();
-            (id, String::new())
-        })
+        .map(|membership| membership.user_id.0)
         .unwrap_or_default();
 
     let agents = store.list_agents(workspace_id).await?;
@@ -90,8 +82,8 @@ pub async fn export_workspace(
         PackageKind::Workspace,
         env!("CARGO_PKG_VERSION"),
         ExportedBy {
-            user_id: owner.0,
-            user_name: owner.1,
+            user_id: owner_id,
+            user_name: String::new(),
             workspace_id: workspace.id.0.clone(),
             workspace_name: workspace.name.clone(),
         },
@@ -129,18 +121,6 @@ impl From<&Workspace> for WorkspaceHeader {
             created_at: workspace.created_at,
         }
     }
-}
-
-/// Keep the compiler honest about the borrowed payload types.
-#[allow(dead_code)]
-fn assert_payload_types(
-    _agents: &[AgentProfile],
-    _channels: &[Channel],
-    _messages: &[ChannelMessage],
-    _tasks: &[Task],
-    _runs: &[Run],
-    _audit: &[AuditEvent],
-) {
 }
 
 fn to_bytes<T: serde::Serialize>(value: &T) -> Result<Vec<u8>, PackageError> {

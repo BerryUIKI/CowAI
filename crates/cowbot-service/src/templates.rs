@@ -112,7 +112,7 @@ impl TemplateService {
     /// Serialize a template document to pretty-printed `.cowtemplate` JSON.
     pub fn export_json(document: &TemplateDocument) -> CowResult<String> {
         document.validate()?;
-        serde_json::to_string_pretty(document).map_err(CowError::from)
+        Ok(serde_json::to_string_pretty(document)?)
     }
 
     /// Create agent profiles from a template and persist them in a workspace.
@@ -125,7 +125,6 @@ impl TemplateService {
             .get(template_id)
             .await?
             .ok_or_else(|| CowError::Config(format!("template '{template_id}' was not found")))?;
-        document.validate()?;
 
         let mut profiles = Vec::with_capacity(document.agents.len());
         for agent in &document.agents {

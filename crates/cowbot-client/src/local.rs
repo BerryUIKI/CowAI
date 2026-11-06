@@ -112,7 +112,8 @@ impl LocalClient {
         let summary = cowbot_package::import_workspace(&store, bytes)
             .await
             .map_err(|error| CowError::Package(error.to_string()))?;
-        let client = Self::initialize(store, EventBus::default_bus()).await?;
+        let context = bootstrap_local(&store).await?;
+        let client = Self::build(store, EventBus::default_bus(), context).await?;
 
         Ok((
             client,
@@ -134,6 +135,11 @@ impl LocalClient {
         let name = name.trim();
         if name.is_empty() {
             return Err(CowError::Config("workspace name is required".to_string()));
+        }
+        if name.chars().count() > 80 {
+            return Err(CowError::Config(
+                "workspace names are limited to 80 characters".to_string(),
+            ));
         }
 
         let store = Store::connect(path).await?;
