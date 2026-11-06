@@ -12,7 +12,6 @@ use crate::types::{
 };
 use async_trait::async_trait;
 use cowbot_core::error::{CowError, CowResult};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, AUTHORIZATION, CONTENT_TYPE};
 use serde_json::{json, Value};
 use tracing::{debug, error};
 
@@ -42,26 +41,6 @@ impl AnthropicProvider {
     fn messages_url(&self) -> String {
         endpoint_url(&self.base_url, "/messages")
     }
-}
-
-fn auth_headers(api_key: Option<&str>) -> HeaderMap {
-    let mut headers = HeaderMap::new();
-    headers.insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-    headers.insert(
-        HeaderName::from_static("anthropic-version"),
-        HeaderValue::from_static(ANTHROPIC_VERSION),
-    );
-
-    if let Some(key) = api_key {
-        if let Ok(value) = HeaderValue::from_str(key) {
-            headers.insert(HeaderName::from_static("x-api-key"), value);
-        }
-        if let Ok(value) = HeaderValue::from_str(&format!("Bearer {key}")) {
-            headers.insert(AUTHORIZATION, value);
-        }
-    }
-
-    headers
 }
 
 /// Convert the internal chat history into an Anthropic system prompt and
@@ -248,11 +227,16 @@ impl LlmProvider for AnthropicProvider {
         let url = self.messages_url();
         debug!(url = %url, model = %request.model, "Dispatching Anthropic messages request");
 
-        let response = self
+        let mut http = self
             .client
             .post(&url)
-            .headers(auth_headers(self.api_key.as_deref()))
-            .json(&request_body(request))
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .json(&request_body(request));
+        if let Some(key) = &self.api_key {
+            http = http.header("x-api-key", key.as_str()).bearer_auth(key);
+        }
+
+        let response = http
             .send()
             .await
             .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
