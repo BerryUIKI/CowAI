@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
+use cowbot_agent::{AgentInstance, Crew, StandardRoles};
 use cowbot_client::{Client, LocalClient, NewTask};
 use cowbot_core::agent::AgentId;
 use cowbot_core::approval::ApprovalLevel;
@@ -181,7 +181,7 @@ async fn local_client_runs_a_crew_and_persists_history() {
 
     let profile = StandardRoles::planner();
     let agent_id = profile.id.clone();
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(AgentInstance::new(
         profile,
         Arc::new(MockLlmProvider::echo()),

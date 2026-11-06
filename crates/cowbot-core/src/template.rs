@@ -171,7 +171,7 @@ impl TemplateDocument {
             name: self.name.clone(),
             description: self.description.clone(),
             version: self.version.clone(),
-            payload: serde_json::to_value(self).map_err(CowError::from)?,
+            payload: serde_json::to_value(self)?,
             created_at: Utc::now(),
         })
     }

@@ -3,6 +3,7 @@ import { useState } from "react";
 import ModelProviderSettings from "./ModelProviderSettings";
 import icon from "./assets/cowbot-icon.svg";
 import wordmark from "./assets/cowbot-wordmark-dark.svg";
+import { errorMessage } from "./errors";
 import type { AgentProfile, TemplateDocument } from "./types";
 
 interface OnboardingProps {
@@ -13,12 +14,6 @@ interface OnboardingProps {
 }
 
 const steps = ["Welcome", "Model", "Team"] as const;
-
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Try again.";
-}
 
 export default function Onboarding({
   templates,

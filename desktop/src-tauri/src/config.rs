@@ -19,9 +19,6 @@ use serde::{Deserialize, Serialize};
 /// File name of the desktop configuration inside the app data directory.
 pub const CONFIG_FILE: &str = "config.json";
 
-/// Format version written by this build.
-pub const CONFIG_VERSION: u32 = 1;
-
 /// Default model shown when no provider is active.
 pub const DEFAULT_MODEL: &str = "gpt-4o";
 
@@ -72,8 +69,6 @@ pub struct ProviderConfig {
 /// Whole desktop configuration file.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
-    #[serde(default = "current_version")]
-    pub version: u32,
     #[serde(default)]
     pub active_provider_id: Option<String>,
     #[serde(default)]
@@ -95,10 +90,6 @@ pub struct AppConfig {
     pub workspaces: Vec<WorkspaceEntry>,
 }
 
-fn current_version() -> u32 {
-    CONFIG_VERSION
-}
-
 fn onboarding_default_for_legacy() -> bool {
     true
 }
@@ -110,7 +101,6 @@ fn auto_check_default() -> bool {
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
-            version: CONFIG_VERSION,
             active_provider_id: None,
             providers: Vec::new(),
             onboarding_completed: false,
@@ -422,7 +412,6 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let path = config_path(root.path());
         let config = AppConfig {
-            version: CONFIG_VERSION,
             active_provider_id: Some("one".to_string()),
             providers: vec![sample_provider("one", "Example")],
             onboarding_completed: true,

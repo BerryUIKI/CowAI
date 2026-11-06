@@ -114,7 +114,7 @@ impl Store {
         .bind(&profile.goal)
         .bind(&profile.backstory)
         .bind(profile.model.clone().unwrap_or_default())
-        .bind(serde_json::to_string(&profile.tools).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&profile.tools)?)
         .bind(if profile.allow_delegation { 1i64 } else { 0i64 })
         .bind(profile.max_iterations as i64)
         .bind(if profile.verbose { 1i64 } else { 0i64 })
@@ -176,7 +176,7 @@ impl Store {
         .bind(&template.name)
         .bind(&template.description)
         .bind(&template.version)
-        .bind(serde_json::to_string(&template.payload).map_err(CowError::from)?)
+        .bind(serde_json::to_string(&template.payload)?)
         .bind(template.created_at.to_rfc3339())
         .execute(self.pool())
         .await

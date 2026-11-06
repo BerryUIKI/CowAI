@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { check as checkForUpdate, type Update } from "@tauri-apps/plugin-updater";
 
 import { getAppInfo, restartApp, setAutoCheckUpdates } from "./api";
+import { errorMessage } from "./errors";
 
 export type UpdatePhase =
   | "idle"
@@ -46,12 +47,6 @@ const initialState: UpdateState = {
   dismissed: false,
 };
 
-function errorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error instanceof Error) return error.message;
-  return "Something went wrong. Try again.";
-}
-
 /**
  * Update check and install state shared by the launch banner and Settings.
  *
@@ -62,40 +57,10 @@ function errorMessage(error: unknown): string {
 export function useUpdater(): Updater {
   const [state, setState] = useState<UpdateState>(initialState);
   const [autoCheck, setAutoCheckState] = useState(true);
-  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const updateRef = useRef<Update | null>(null);
   const checkInFlight = useRef(false);
   const installInFlight = useRef(false);
   const autoCheckStarted = useRef(false);
-  const mounted = useRef(true);
-
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    getAppInfo()
-      .then((info) => {
-        if (cancelled) return;
-        setState((current) => ({ ...current, currentVersion: info.version }));
-        setAutoCheckState(info.autoCheckUpdates);
-      })
-      .catch(() => {
-        // The About section still works with an unknown version.
-      })
-      .finally(() => {
-        if (!cancelled) setPreferencesLoaded(true);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const check = useCallback(async (options?: { silent?: boolean }) => {
     const silent = options?.silent ?? false;
@@ -113,7 +78,6 @@ export function useUpdater(): Updater {
 
     try {
       const update = await checkForUpdate();
-      if (!mounted.current) return;
       updateRef.current = update;
       const checkedAt = new Date().toISOString();
 
@@ -143,7 +107,7 @@ export function useUpdater(): Updater {
         }));
       }
     } catch (error) {
-      if (mounted.current && !silent) {
+      if (!silent) {
         setState((current) => ({
           ...current,
           phase: "error",
@@ -158,13 +122,27 @@ export function useUpdater(): Updater {
     }
   }, []);
 
-  const silentCheck = useCallback(() => check({ silent: true }), [check]);
-
   useEffect(() => {
-    if (!preferencesLoaded || !autoCheck || autoCheckStarted.current) return;
-    autoCheckStarted.current = true;
-    void silentCheck();
-  }, [autoCheck, preferencesLoaded, silentCheck]);
+    let cancelled = false;
+
+    getAppInfo()
+      .then((info) => {
+        if (cancelled) return;
+        setState((current) => ({ ...current, currentVersion: info.version }));
+        setAutoCheckState(info.autoCheckUpdates);
+        if (info.autoCheckUpdates && !autoCheckStarted.current) {
+          autoCheckStarted.current = true;
+          void check({ silent: true });
+        }
+      })
+      .catch(() => {
+        // The About section still works with an unknown version.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [check]);
 
   const install = useCallback(async () => {
     const update = updateRef.current;
@@ -182,7 +160,6 @@ export function useUpdater(): Updater {
     try {
       let downloaded = 0;
       await update.downloadAndInstall((event) => {
-        if (!mounted.current) return;
         if (event.event === "Started") {
           setState((current) => ({
             ...current,
@@ -193,17 +170,13 @@ export function useUpdater(): Updater {
           setState((current) => ({ ...current, downloaded }));
         }
       });
-      if (mounted.current) {
-        setState((current) => ({ ...current, phase: "ready" }));
-      }
+      setState((current) => ({ ...current, phase: "ready" }));
     } catch (error) {
-      if (mounted.current) {
-        setState((current) => ({
-          ...current,
-          phase: "error",
-          error: errorMessage(error),
-        }));
-      }
+      setState((current) => ({
+        ...current,
+        phase: "error",
+        error: errorMessage(error),
+      }));
     } finally {
       installInFlight.current = false;
     }
@@ -213,13 +186,11 @@ export function useUpdater(): Updater {
     try {
       await restartApp();
     } catch (error) {
-      if (mounted.current) {
-        setState((current) => ({
-          ...current,
-          phase: "error",
-          error: errorMessage(error),
-        }));
-      }
+      setState((current) => ({
+        ...current,
+        phase: "error",
+        error: errorMessage(error),
+      }));
     }
   }, []);
 

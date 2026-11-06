@@ -31,24 +31,13 @@ pub struct ImportSummary {
 
 /// Read and verify a package without importing it.
 pub fn inspect(bytes: &[u8]) -> Result<Manifest, PackageError> {
-    let entries = read_verified_entries(bytes)?;
-    let manifest_bytes = entries
-        .get(MANIFEST_PATH)
-        .ok_or_else(|| PackageError::MissingFile {
-            path: MANIFEST_PATH.to_string(),
-        })?;
-    let manifest: Manifest = serde_json::from_slice(manifest_bytes)?;
-    manifest.validate()?;
-    Ok(manifest)
+    read_verified_entries(bytes).map(|(manifest, _)| manifest)
 }
 
 /// Import a workspace package. The archive is fully verified before any
 /// write happens, so a bad package leaves no partial state.
 pub async fn import_workspace(store: &Store, bytes: &[u8]) -> Result<ImportSummary, PackageError> {
-    let entries = read_verified_entries(bytes)?;
-    let manifest_bytes = required(&entries, MANIFEST_PATH)?;
-    let manifest: Manifest = serde_json::from_slice(manifest_bytes)?;
-    manifest.validate()?;
+    let (manifest, entries) = read_verified_entries(bytes)?;
     if manifest.kind != PackageKind::Workspace {
         return Err(PackageError::Invalid(
             "expected a workspace package".to_string(),
@@ -189,7 +178,7 @@ fn known_paths() -> &'static [&'static str] {
 /// Read every entry, reject unknown files, and check all checksums.
 fn read_verified_entries(
     bytes: &[u8],
-) -> Result<std::collections::BTreeMap<String, Vec<u8>>, PackageError> {
+) -> Result<(Manifest, std::collections::BTreeMap<String, Vec<u8>>), PackageError> {
     if bytes.len() as u64 > MAX_PACKAGE_BYTES {
         return Err(PackageError::TooLarge {
             limit: MAX_PACKAGE_BYTES,
@@ -232,5 +221,5 @@ fn read_verified_entries(
         }
     }
 
-    Ok(entries)
+    Ok((manifest, entries))
 }

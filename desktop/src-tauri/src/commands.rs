@@ -1,4 +1,4 @@
-use cowbot_agent::{AgentInstance, Crew, ProcessType, StandardRoles};
+use cowbot_agent::{AgentInstance, Crew, StandardRoles};
 use cowbot_client::{Client, NewTask};
 use cowbot_core::agent::{AgentId, AgentProfile};
 use cowbot_core::approval::{Approval, ApprovalId, ApprovalLevel};
@@ -12,7 +12,7 @@ use cowbot_llm::{ChatCompletionRequest, ChatMessage};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, State};
 
 use crate::{config, AppState};
 
@@ -120,11 +120,10 @@ pub async fn create_task(
     expected_output: String,
     assignee: String,
     channel_id: Option<String>,
-    approval_level: String,
+    approval_level: ApprovalLevel,
 ) -> Result<Task, String> {
-    let approval_level = parse_approval_level(&approval_level)?;
     let mut task = NewTask::new(description, expected_output, AgentId::new(assignee));
-    if let Some(channel_id) = channel_id.filter(|id| !id.trim().is_empty()) {
+    if let Some(channel_id) = channel_id {
         task = task.in_channel(ChannelId::new(channel_id));
     }
     task = task.with_approval_level(approval_level);
@@ -141,9 +140,8 @@ pub async fn run_task(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
     task_id: String,
-    approval_level: String,
+    approval_level: ApprovalLevel,
 ) -> Result<(), String> {
-    let approval_level = parse_approval_level(&approval_level)?;
     let task = state
         .client
         .get_task(&TaskId::new(task_id.clone()))
@@ -151,15 +149,13 @@ pub async fn run_task(
         .map_err(|error| error.to_string())?
         .ok_or_else(|| format!("task '{task_id}' was not found"))?;
 
-    {
-        let mut running = state.running.lock().map_err(|error| error.to_string())?;
-        if !running.insert(task_id.clone()) {
-            return Err(format!("task '{task_id}' is already running"));
-        }
+    let running = state.running.clone();
+    if !running.lock().insert(task_id.clone()) {
+        return Err(format!("task '{task_id}' is already running"));
     }
 
     let client = state.client.clone();
-    let (llm, model) = state.runtime_model()?;
+    let (llm, model) = state.runtime_model();
     let tools = state.tools.clone();
     let run_id = task_id.clone();
 
@@ -170,11 +166,7 @@ pub async fn run_task(
         }
         .await;
 
-        if let Some(state) = app.try_state::<AppState>() {
-            if let Ok(mut running) = state.running.lock() {
-                running.remove(&run_id);
-            }
-        }
+        running.lock().remove(&run_id);
 
         let payload = match outcome {
             Ok(_) => RunFinished {
@@ -214,7 +206,7 @@ fn build_standard_crew(
     let reviewer_id = reviewer_profile.id.clone();
     let reviewer = AgentInstance::new(reviewer_profile, llm.clone(), tools.clone(), model);
 
-    let mut crew = Crew::new(ProcessType::Sequential);
+    let mut crew = Crew::new();
     crew.add_agent(planner);
     crew.add_agent(coder);
     crew.add_agent(reviewer);
@@ -363,12 +355,11 @@ fn load_config(state: &AppState) -> Result<config::AppConfig, String> {
 
 fn persist_config(
     state: &AppState,
-    mut config: config::AppConfig,
+    config: config::AppConfig,
 ) -> Result<config::AppConfig, String> {
-    config.version = config::CONFIG_VERSION;
     config::save(&state.config_path, &config)
         .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))?;
-    state.apply_config(&config)?;
+    state.apply_config(&config);
     Ok(config)
 }
 
@@ -451,14 +442,13 @@ fn upsert_provider(config: &mut config::AppConfig, draft: &ProviderDraft) -> Res
         }
         None => {
             let id = config::new_provider_id(&config.providers);
-            let key = if draft.clear_api_key { None } else { typed_key };
             config.providers.push(config::make_provider(
                 id.clone(),
                 &draft.name,
                 draft.protocol,
                 &draft.base_url,
                 &draft.model,
-                key.as_deref(),
+                typed_key.as_deref(),
             )?);
             if config.active_provider().is_none() {
                 config.active_provider_id = Some(id);
@@ -561,11 +551,7 @@ pub struct AppInfo {
 
 #[tauri::command]
 pub fn get_app_info(app: AppHandle, state: State<'_, AppState>) -> Result<AppInfo, String> {
-    // The version is still useful when the configuration file cannot be read;
-    // the startup path already falls back to defaults in that case.
-    let auto_check_updates = load_config(&state)
-        .map(|config| config.auto_check_updates)
-        .unwrap_or(true);
+    let auto_check_updates = load_config(&state)?.auto_check_updates;
     Ok(AppInfo {
         version: app.package_info().version.to_string(),
         auto_check_updates,
@@ -577,7 +563,6 @@ pub fn get_app_info(app: AppHandle, state: State<'_, AppState>) -> Result<AppInf
 pub fn set_auto_check_updates(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
     let mut config = load_config(&state)?;
     config.auto_check_updates = enabled;
-    config.version = config::CONFIG_VERSION;
     config::save(&state.config_path, &config)
         .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))
 }
@@ -598,10 +583,7 @@ pub struct WorkspaceView {
 }
 
 fn ensure_no_running_tasks(state: &AppState) -> Result<(), String> {
-    let running = state
-        .running
-        .lock()
-        .map_err(|_| "task state lock was poisoned".to_string())?;
+    let running = state.running.lock();
     if running.is_empty() {
         Ok(())
     } else {
@@ -770,13 +752,6 @@ pub async fn create_workspace(
     ensure_no_running_tasks(&state)?;
 
     let name = name.trim();
-    if name.is_empty() {
-        return Err("Enter a workspace name.".to_string());
-    }
-    if name.chars().count() > 80 {
-        return Err("Workspace names are limited to 80 characters.".to_string());
-    }
-
     let database = format!("{}/{}.db", config::WORKSPACES_DIR, WorkspaceId::random().0);
     let database_path = config::resolve_database_path(&state.data_dir, &database)?;
     if let Some(parent) = database_path.parent() {
@@ -875,38 +850,9 @@ fn summarize_reply(reply: &str) -> String {
     summary
 }
 
-fn parse_approval_level(value: &str) -> Result<ApprovalLevel, String> {
-    match value {
-        "ask" => Ok(ApprovalLevel::Ask),
-        "safe_auto" => Ok(ApprovalLevel::SafeAuto),
-        "plan_only" => Ok(ApprovalLevel::PlanOnly),
-        "trusted" => Ok(ApprovalLevel::Trusted),
-        other => Err(format!("unknown approval level '{other}'")),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn approval_levels_parse() {
-        assert_eq!(parse_approval_level("ask"), Ok(ApprovalLevel::Ask));
-        assert_eq!(
-            parse_approval_level("safe_auto"),
-            Ok(ApprovalLevel::SafeAuto)
-        );
-        assert_eq!(
-            parse_approval_level("plan_only"),
-            Ok(ApprovalLevel::PlanOnly)
-        );
-        assert_eq!(parse_approval_level("trusted"), Ok(ApprovalLevel::Trusted));
-    }
-
-    #[test]
-    fn unknown_approval_level_is_rejected() {
-        assert!(parse_approval_level("sometimes").is_err());
-    }
 
     fn draft(name: &str, base_url: &str, model: &str, api_key: Option<&str>) -> ProviderDraft {
         ProviderDraft {

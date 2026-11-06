@@ -153,7 +153,7 @@ impl ToolCallRecorder for RunToolCallRecorder {
             call.arguments.clone(),
         );
         record.id = call.id.clone();
-        record.result = Some(serde_json::to_value(result).map_err(CowError::from)?);
+        record.result = Some(serde_json::to_value(result)?);
         record.approved_by = approved_by.map(str::to_string);
         self.store.record_tool_call(&record).await
     }

@@ -4,13 +4,14 @@ mod migration;
 
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::Arc;
 
 use cowbot_client::{Client, LocalClient};
 use cowbot_llm::LlmProvider;
 use cowbot_tools::{
     CodeExecutionTool, ReadFileTool, SubprocessSandbox, ToolRegistry, WriteFileTool,
 };
+use parking_lot::{Mutex, RwLock};
 use tauri::{Emitter, Manager};
 
 /// Model configuration currently in effect.
@@ -30,24 +31,23 @@ pub struct AppState {
     /// Directory holding workspace databases, `config.json`, and `cowbot.db`.
     pub data_dir: PathBuf,
     /// Task ids with a crew currently executing.
-    pub running: Mutex<HashSet<String>>,
+    pub running: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppState {
     /// Snapshot the provider handle and model name for one crew run.
-    pub fn runtime_model(&self) -> Result<(Arc<dyn LlmProvider>, String), String> {
-        let runtime = self.model.read().map_err(|error| error.to_string())?;
-        Ok((runtime.llm.clone(), runtime.model.clone()))
+    pub fn runtime_model(&self) -> (Arc<dyn LlmProvider>, String) {
+        let runtime = self.model.read();
+        (runtime.llm.clone(), runtime.model.clone())
     }
 
     /// Rebuild the LLM client after the provider configuration changed.
-    pub fn apply_config(&self, config: &config::AppConfig) -> Result<(), String> {
+    pub fn apply_config(&self, config: &config::AppConfig) {
         let resolved = config::resolve_active(config);
         let llm = config::build_provider(&resolved);
-        let mut runtime = self.model.write().map_err(|error| error.to_string())?;
+        let mut runtime = self.model.write();
         runtime.model = resolved.model;
         runtime.llm = llm;
-        Ok(())
     }
 
     fn build_tools(workspace_dir: &std::path::Path) -> ToolRegistry {
@@ -151,7 +151,7 @@ pub fn run() {
                 }),
                 config_path,
                 data_dir,
-                running: Mutex::new(HashSet::new()),
+                running: Arc::new(Mutex::new(HashSet::new())),
             });
             Ok(())
         })

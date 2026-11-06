@@ -116,7 +116,7 @@ impl AgentInstance {
             // If the model produced thought/text, publish to event bus
             if let Some(content) = &response.content {
                 if !content.trim().is_empty() {
-                    let _ = bus.publish(Event::new(EventPayload::AgentThought {
+                    bus.publish(Event::new(EventPayload::AgentThought {
                         agent_id: self.profile.id.clone(),
                         thought: content.clone(),
                     }));
@@ -151,7 +151,7 @@ impl AgentInstance {
                     arguments: call.arguments.clone(),
                 };
 
-                let _ = bus.publish(Event::new(EventPayload::ToolCallRequested {
+                bus.publish(Event::new(EventPayload::ToolCallRequested {
                     agent_id: self.profile.id.clone(),
                     call: tool_call.clone(),
                 }));
@@ -182,7 +182,7 @@ impl AgentInstance {
                     }
                 };
 
-                let _ = bus.publish(Event::new(EventPayload::ToolCallExecuted {
+                bus.publish(Event::new(EventPayload::ToolCallExecuted {
                     agent_id: self.profile.id.clone(),
                     result: tool_res.clone(),
                 }));

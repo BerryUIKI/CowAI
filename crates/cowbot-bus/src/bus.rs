@@ -1,4 +1,3 @@
-use cowbot_core::error::CowResult;
 use cowbot_core::event::Event;
 use parking_lot::RwLock;
 use std::collections::VecDeque;
@@ -31,11 +30,12 @@ impl EventBus {
     }
 
     /// Publish an event to all active subscribers and record to in-memory history.
-    pub fn publish(&self, event: Event) -> CowResult<usize> {
+    ///
+    /// Returns the number of live subscribers that received the event.
+    pub fn publish(&self, event: Event) -> usize {
         debug!(event_id = %event.id, "Publishing event to bus");
 
-        // Record in history buffer
-        {
+        if self.max_history > 0 {
             let mut hist = self.history.write();
             if hist.len() >= self.max_history {
                 hist.pop_front();
@@ -43,14 +43,8 @@ impl EventBus {
             hist.push_back(event.clone());
         }
 
-        // Broadcast to live subscribers
-        match self.sender.send(event) {
-            Ok(receiver_count) => Ok(receiver_count),
-            Err(_) => {
-                // Err occurs if there are 0 active receivers, which is non-fatal for pub/sub
-                Ok(0)
-            }
-        }
+        // A send error means there are no active receivers, which is fine for pub/sub.
+        self.sender.send(event).unwrap_or(0)
     }
 
     /// Subscribe to live events broadcast on this bus.
@@ -61,11 +55,6 @@ impl EventBus {
     /// Retrieve a snapshot of recent historical events.
     pub fn history(&self) -> Vec<Event> {
         self.history.read().iter().cloned().collect()
-    }
-
-    /// Returns the number of active subscribers currently listening.
-    pub fn subscriber_count(&self) -> usize {
-        self.sender.receiver_count()
     }
 }
 
@@ -83,7 +72,7 @@ mod tests {
             message: "CowBot engine initialized".to_string(),
         });
 
-        let recipients = bus.publish(event.clone()).unwrap();
+        let recipients = bus.publish(event.clone());
         assert_eq!(recipients, 1);
 
         let received = rx.recv().await.unwrap();
@@ -101,10 +90,20 @@ mod tests {
             let event = Event::new(EventPayload::SystemNotice {
                 message: format!("Notice {}", i),
             });
-            bus.publish(event).unwrap();
+            bus.publish(event);
         }
 
         let history = bus.history();
         assert_eq!(history.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_bus_with_zero_history_keeps_nothing() {
+        let bus = EventBus::new(16, 0);
+        bus.publish(Event::new(EventPayload::SystemNotice {
+            message: "Notice".to_string(),
+        }));
+
+        assert!(bus.history().is_empty());
     }
 }
