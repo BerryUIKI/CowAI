@@ -6,7 +6,8 @@ approvals, and moving workspaces in and out of the app.
 
 CowBot runs entirely on your machine. Messages, tasks, approvals, and run
 history live in local SQLite databases; the only network traffic is the model
-request sent to the endpoint you configure.
+request sent to the endpoint you configure, plus one update check against GitHub
+at launch when automatic update checks are enabled (see [Updates](#updates)).
 
 ## Install
 
@@ -27,8 +28,10 @@ Download the build for your platform from the
 - **Linux:** `sudo apt install ./CowBot_<version>_amd64.deb`, or
   `chmod +x CowBot_<version>_amd64.AppImage && ./CowBot_<version>_amd64.AppImage`.
 
-Releases are unsigned and have no auto-updater; install a newer release the same
-way.
+Builds are unsigned. From 0.1.2 onward CowBot can download and install updates
+itself when you ask it to; see [Updates](#updates). Users upgrading from 0.1.1
+or earlier must install 0.1.2 manually once because those versions have no
+update code.
 
 ## First run
 
@@ -145,6 +148,32 @@ with your user permissions, so treat model-generated commands as untrusted.
 - Uninstalling the app does not delete your data; remove the app data directory
   manually if you want a clean install.
 
+## Updates
+
+CowBot 0.1.2 and later can check for and install new versions. Release builds
+are signed with the updater's own key, so updates are verified even though the
+installers are not code-signed.
+
+- **Automatic checks.** With **Settings → About → Check for updates
+  automatically** enabled (the default), CowBot asks GitHub Releases once at
+  launch whether a newer stable version exists. The check sends no workspace
+  data and can be turned off. When offline, the check fails silently.
+- **Manual checks.** Open **Settings → About** and choose **Check for updates**.
+- **Installing.** When an update is available, a banner appears above the main
+  pane and the About page shows the version and release date. Choose **Download
+  and install**; progress appears in place. Finish or cancel running tasks
+  first: installing is disabled while a crew runs.
+- **Restarting.** On macOS and Linux, choose **Restart now** after the download
+  finishes. On Windows the installer closes CowBot automatically.
+
+Updates work for the NSIS installer on Windows, the app installed from the DMG
+on macOS, and the AppImage on Linux. If you installed the Windows MSI or the
+Linux deb package, download and install new releases manually. macOS may ask you
+to allow CowBot again after an update because builds are not notarized.
+
+CowBot 0.1.1 and earlier have no updater. Install 0.1.2 manually once; later
+versions update themselves.
+
 ## Command line
 
 The `cowbot` CLI covers headless and scripted use. It does not read the desktop
@@ -176,6 +205,16 @@ cowbot import --input my-workspace.cowpkg --db other.db
   it from the registry by restarting, or restore the file.
 - **Package import fails** — the package may be corrupt, from an unsupported
   schema version, or larger than 512 MB.
+- **An update check fails** — CowBot needs to reach `github.com`. Check the
+  network or proxy; automatic checks stay silent when offline. A manual check
+  reports an error when the newest published release has no `latest.json` yet.
+- **No update is offered** — only published, non-prerelease releases are
+  visible; draft releases do not appear.
+- **An update fails to install** — retry from **Settings → About**. The app must
+  be able to write to its installation location (the AppImage directory or
+  `/Applications`).
+- **The old version still runs after updating** — close and reopen CowBot. On
+  Windows the installer may still be finishing.
 
 Report bugs at https://github.com/BerryUIKI/CowBot/issues. For security
 reporting, see [SECURITY.md](../SECURITY.md).
@@ -191,4 +230,6 @@ reporting, see [SECURITY.md](../SECURITY.md).
 - No streaming responses, retries, rate limiting, or token accounting.
 - The subprocess sandbox is not OS-level isolation.
 - Workspace deletion and renaming are not available in the UI.
-- Builds are unsigned and do not auto-update.
+- Builds are unsigned; macOS may require approval again after an update.
+  Automatic updates cover NSIS, the DMG-installed app, and AppImage; MSI and
+  deb installs update manually.

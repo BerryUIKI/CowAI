@@ -551,6 +551,43 @@ pub fn complete_onboarding(state: State<'_, AppState>) -> Result<OnboardingState
     Ok(onboarding_state(&config))
 }
 
+/// Build version and update-check preference shown in the About settings section.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfo {
+    pub version: String,
+    pub auto_check_updates: bool,
+}
+
+#[tauri::command]
+pub fn get_app_info(app: AppHandle, state: State<'_, AppState>) -> Result<AppInfo, String> {
+    // The version is still useful when the configuration file cannot be read;
+    // the startup path already falls back to defaults in that case.
+    let auto_check_updates = load_config(&state)
+        .map(|config| config.auto_check_updates)
+        .unwrap_or(true);
+    Ok(AppInfo {
+        version: app.package_info().version.to_string(),
+        auto_check_updates,
+    })
+}
+
+/// Persist whether CowBot checks for updates when it starts.
+#[tauri::command]
+pub fn set_auto_check_updates(state: State<'_, AppState>, enabled: bool) -> Result<(), String> {
+    let mut config = load_config(&state)?;
+    config.auto_check_updates = enabled;
+    config.version = config::CONFIG_VERSION;
+    config::save(&state.config_path, &config)
+        .map_err(|error| format!("failed to write {}: {error}", state.config_path.display()))
+}
+
+/// Restart the app so an installed update takes effect.
+#[tauri::command]
+pub fn restart_app(app: AppHandle) {
+    app.restart();
+}
+
 /// One workspace database offered by the desktop switcher.
 #[derive(Debug, Clone, Serialize)]
 pub struct WorkspaceView {

@@ -84,6 +84,9 @@ pub struct AppConfig {
     /// so an upgrade does not show the guide to an existing user.
     #[serde(default = "onboarding_default_for_legacy")]
     pub onboarding_completed: bool,
+    /// Whether the desktop checks GitHub Releases for a newer version at startup.
+    #[serde(default = "auto_check_default")]
+    pub auto_check_updates: bool,
     /// Database file (relative to the app data directory) the desktop opens.
     #[serde(default)]
     pub active_workspace_database: Option<String>,
@@ -100,6 +103,10 @@ fn onboarding_default_for_legacy() -> bool {
     true
 }
 
+fn auto_check_default() -> bool {
+    true
+}
+
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
@@ -107,6 +114,7 @@ impl Default for AppConfig {
             active_provider_id: None,
             providers: Vec::new(),
             onboarding_completed: false,
+            auto_check_updates: true,
             active_workspace_database: None,
             workspaces: Vec::new(),
         }
@@ -358,6 +366,7 @@ mod tests {
         assert!(config.providers.is_empty());
         assert!(config.active_provider_id.is_none());
         assert!(!config.onboarding_completed);
+        assert!(config.auto_check_updates);
     }
 
     #[test]
@@ -387,6 +396,28 @@ mod tests {
     }
 
     #[test]
+    fn legacy_config_files_enable_update_checks() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(&path, r#"{"version":1,"providers":[]}"#).unwrap();
+
+        assert!(load(&path).unwrap().auto_check_updates);
+    }
+
+    #[test]
+    fn explicit_update_preference_is_preserved() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"providers":[],"auto_check_updates":false}"#,
+        )
+        .unwrap();
+
+        assert!(!load(&path).unwrap().auto_check_updates);
+    }
+
+    #[test]
     fn save_and_load_roundtrip() {
         let root = tempfile::tempdir().unwrap();
         let path = config_path(root.path());
@@ -395,6 +426,7 @@ mod tests {
             active_provider_id: Some("one".to_string()),
             providers: vec![sample_provider("one", "Example")],
             onboarding_completed: true,
+            auto_check_updates: true,
             active_workspace_database: Some("workspaces/one.db".to_string()),
             workspaces: vec![WorkspaceEntry {
                 database: "workspaces/one.db".to_string(),

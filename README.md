@@ -42,14 +42,14 @@ The Rust runtime and CLI work today. Phase 1 (the local/offline MVP) is complete
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, switchable model providers, agents/templates, and workspace creation/export/import/switching via Tauri |
-| Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow |
+| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, switchable model providers, agents/templates, workspace creation/export/import/switching, and automatic update checks with in-app installation via Tauri |
+| Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow, plus signed updater artifacts and a `latest.json` manifest |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI and desktop |
 | Model providers | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including DeepSeek, Ollama, OpenRouter, and Claude Code-compatible relays; mock providers for offline testing |
 
-**Phase 1 complete:** milestones 1.1–1.7 are implemented. The local client and Tauri desktop shell cover Channels, Tasks, Approvals, and Settings, switchable model providers across three API protocols, desktop-initiated crew execution, first-run onboarding, workspace creation and switching, and `.cowpkg` export/import through both the CLI and desktop. The release workflow produces unsigned Windows, macOS, and Linux installers. The [user guide](docs/USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, and troubleshooting. Installer signing and remote mode (Phase 2) remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**Phase 1 complete:** milestones 1.1–1.7 are implemented. The local client and Tauri desktop shell cover Channels, Tasks, Approvals, and Settings, switchable model providers across three API protocols, desktop-initiated crew execution, first-run onboarding, workspace creation and switching, `.cowpkg` export/import through both the CLI and desktop, and signed in-app updates delivered through GitHub Releases. The release workflow produces unsigned Windows, macOS, and Linux installers. The [user guide](docs/USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, updates, and troubleshooting. Operating-system code signing and remote mode (Phase 2) remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Naming and compatibility
 
@@ -66,6 +66,8 @@ Desktop installers are built by the [release workflow](.github/workflows/release
 - **Linux:** `.deb` and `.AppImage`
 
 Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. See [ADR-0014](docs/ADR/0014-desktop-release-builds.md) for the release policy. Until a release is published, build from source with the quick start below.
+
+From 0.1.2 onward, CowBot checks GitHub Releases at launch and can download and install signed updates from **Settings → About**. Users upgrading from 0.1.1 or earlier must install 0.1.2 manually once. See [ADR-0018](docs/ADR/0018-desktop-auto-updates.md) and the [user guide](docs/USER_GUIDE.md#updates).
 
 ## Quick start
 
@@ -151,7 +153,7 @@ pnpm install
 pnpm run tauri dev
 ```
 
-Install Node.js 22.13+, pnpm, and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation, crew execution, approvals, model providers, and workspace export/import with local workspace switching; installers come from the release workflow.
+Install Node.js 22.13+, pnpm, and the platform's Tauri native prerequisites first; see [Desktop setup](desktop/README.md). Desktop data is stored in the app-data directory, separate from the CLI's default database. The shell supports channels, task creation, crew execution, approvals, model providers, workspace export/import with local workspace switching, and update checks with in-app installation; installers come from the release workflow.
 
 ## Architecture
 

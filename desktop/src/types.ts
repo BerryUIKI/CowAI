@@ -207,6 +207,11 @@ export interface WorkspaceSummary {
   available: boolean;
 }
 
+export interface AppInfo {
+  version: string;
+  autoCheckUpdates: boolean;
+}
+
 const taskStatusLabels = {
   pending: "Pending",
   in_progress: "In progress",

@@ -6,6 +6,7 @@ import Onboarding from "./Onboarding";
 import SettingsView from "./SettingsView";
 import TaskDetail from "./TaskDetail";
 import type { AssignmentWithEvents, RunWithCalls } from "./TaskDetail";
+import UpdateBanner from "./UpdateBanner";
 import {
   cancelTask,
   completeOnboarding,
@@ -45,6 +46,7 @@ import type {
   TemplateDocument,
 } from "./types";
 import { approvalLevelLabel, taskStatusKind, taskStatusLabel } from "./types";
+import { useUpdater } from "./updater";
 
 type View = "channels" | "tasks" | "approvals" | "settings";
 
@@ -103,6 +105,7 @@ export default function App() {
   const endRef = useRef<HTMLDivElement | null>(null);
   const channelNameRef = useRef<HTMLInputElement | null>(null);
   const taskDescriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const updater = useUpdater();
 
   const selectedChannel = useMemo(
     () => channels.find((channel) => channel.id === selectedId) ?? null,
@@ -701,6 +704,8 @@ export default function App() {
       </aside>
 
       <main className="main" inert={onboardingOpen}>
+        <UpdateBanner updater={updater} tasksRunning={runningTasks.size > 0} />
+
         {error ? (
           <div className="error-banner" role="alert">
             <span>{error}</span>
@@ -963,6 +968,8 @@ export default function App() {
             templates={templates}
             templateId={templateId}
             busy={busy}
+            updater={updater}
+            tasksRunning={runningTasks.size > 0}
             onSelectTemplate={setTemplateId}
             onAddAgents={handleAddAgents}
           />

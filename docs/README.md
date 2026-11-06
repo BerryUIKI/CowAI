@@ -15,7 +15,7 @@ Start with the root [README](../README.md) for implemented functionality and a r
 
 ## Reading design documents
 
-The PRD, architecture, roadmap, and ADRs include both implemented milestones and future scope. Phase 1 (milestones 1.1–1.7) is implemented: persistence, services, approvals, a local client, CLI integration, the desktop shell with model providers and workspace transfer, release builds, and the user guide. Phase 2 (self-hosted team mode) has not started. Check the root README and source for precise availability.
+The PRD, architecture, roadmap, and ADRs include both implemented milestones and future scope. Phase 1 (milestones 1.1–1.7) is implemented: persistence, services, approvals, a local client, CLI integration, the desktop shell with model providers, workspace transfer, and automatic updates, release builds, and the user guide. Phase 2 (self-hosted team mode) has not started. Check the root README and source for precise availability.
 
 ## Visual assets
 

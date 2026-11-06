@@ -21,6 +21,7 @@ These records accompany the [architecture](../ARCHITECTURE.md). A decision descr
 | [0015](0015-pnpm-for-desktop-dependencies.md) | pnpm for desktop dependencies |
 | [0016](0016-model-provider-protocols.md) | Model provider protocols |
 | [0017](0017-desktop-workspace-transfer.md) | Desktop workspace transfer |
+| [0018](0018-desktop-auto-updates.md) | Desktop automatic updates |
 
 For a new decision, copy [the template](TEMPLATE.md), assign the next unused four-digit number, and use a descriptive English filename. Discuss it in a linked issue/PR. Record context, alternatives, consequences, and status; do not silently rewrite an accepted decision when direction changes. Add a superseding record and link both records instead.
 
