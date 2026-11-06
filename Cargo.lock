@@ -282,7 +282,6 @@ dependencies = [
  "cowbot-core",
  "cowbot-llm",
  "cowbot-tools",
- "serde",
  "serde_json",
  "tokio",
  "tracing",
@@ -292,7 +291,6 @@ dependencies = [
 name = "cowbot-bus"
 version = "0.1.1"
 dependencies = [
- "async-trait",
  "cowbot-core",
  "parking_lot",
  "tokio",
@@ -313,8 +311,6 @@ dependencies = [
  "cowbot-service",
  "cowbot-store",
  "cowbot-tools",
- "serde",
- "serde_json",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -349,8 +345,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
- "tokio",
- "tracing",
  "uuid",
 ]
 
@@ -379,7 +373,6 @@ dependencies = [
  "sha2",
  "thiserror 1.0.69",
  "tokio",
- "uuid",
  "zip",
 ]
 
