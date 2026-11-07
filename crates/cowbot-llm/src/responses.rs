@@ -4,7 +4,7 @@
 //! top-level `function_call` items and tool results are `function_call_output`
 //! items rather than chat messages.
 
-use crate::endpoint::endpoint_url;
+use crate::endpoint::{endpoint_url, models_url, parse_model_ids};
 use crate::provider::LlmProvider;
 use crate::types::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatRole, LlmToolCall,
@@ -33,6 +33,10 @@ impl ResponsesProvider {
 
     fn responses_url(&self) -> String {
         endpoint_url(&self.base_url, "/responses")
+    }
+
+    fn models_url(&self) -> String {
+        models_url(&self.base_url)
     }
 }
 
@@ -226,6 +230,41 @@ impl LlmProvider for ResponsesProvider {
 
         parse_response(payload)
     }
+
+    async fn list_models(&self) -> CowResult<Vec<String>> {
+        let url = self.models_url();
+        debug!(url = %url, "Fetching OpenAI Responses model list");
+
+        let mut http = self.client.get(&url);
+        if let Some(key) = &self.api_key {
+            http = http.bearer_auth(key);
+        }
+
+        let response = http
+            .send()
+            .await
+            .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let err_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            error!(status = %status, body = %err_text, "Model list request returned non-200 status");
+            return Err(CowError::Llm(format!(
+                "API returned error status {}: {}",
+                status, err_text
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| CowError::Llm(format!("Failed to parse response JSON: {}", e)))?;
+
+        parse_model_ids(&payload)
+    }
 }
 
 #[cfg(test)]
@@ -359,11 +398,13 @@ mod tests {
             provider.responses_url(),
             "http://127.0.0.1:8788/v1/responses"
         );
+        assert_eq!(provider.models_url(), "http://127.0.0.1:8788/v1/models");
 
         let provider = ResponsesProvider::new("https://api.openai.com/v1/responses", None);
         assert_eq!(
             provider.responses_url(),
             "https://api.openai.com/v1/responses"
         );
+        assert_eq!(provider.models_url(), "https://api.openai.com/v1/models");
     }
 }

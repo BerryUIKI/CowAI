@@ -4,6 +4,7 @@ import type { FormEvent } from "react";
 import {
   activateModelProvider,
   deleteModelProvider,
+  fetchProviderModels,
   getModelSettings,
   saveModelProvider,
   testModelProvider,
@@ -35,111 +36,285 @@ const protocolOptions: ProtocolOption[] = [
   },
 ];
 
-interface ProviderPreset {
-  id: string;
-  label: string;
-  protocol: ProviderProtocol;
-  baseUrl: string;
-  model: string;
-}
-
-function customPreset(protocol: ProviderProtocol): ProviderPreset {
-  return {
-    id: "custom",
-    label: "Custom",
-    protocol,
-    baseUrl: "",
-    model: "",
-  };
-}
-
-const presetsByProtocol: Record<ProviderProtocol, ProviderPreset[]> = {
-  openai: [
-    {
-      id: "openai",
-      label: "OpenAI",
-      protocol: "openai",
-      baseUrl: "https://api.openai.com/v1",
-      model: "gpt-4o",
-    },
-    {
-      id: "deepseek",
-      label: "DeepSeek",
-      protocol: "openai",
-      baseUrl: "https://api.deepseek.com",
-      model: "deepseek-chat",
-    },
-    {
-      id: "ollama",
-      label: "Ollama",
-      protocol: "openai",
-      baseUrl: "http://localhost:11434/v1",
-      model: "llama3.2",
-    },
-    customPreset("openai"),
-  ],
-  anthropic: [
-    {
-      id: "claude",
-      label: "Claude",
-      protocol: "anthropic",
-      baseUrl: "https://api.anthropic.com",
-      model: "claude-sonnet-5-5",
-    },
-    customPreset("anthropic"),
-  ],
-  "openai-responses": [
-    {
-      id: "openai-responses",
-      label: "OpenAI Responses",
-      protocol: "openai-responses",
-      baseUrl: "https://api.openai.com/v1",
-      model: "gpt-4o",
-    },
-    customPreset("openai-responses"),
-  ],
-};
-
 function protocolLabel(protocol: ProviderProtocol): string {
   return (
     protocolOptions.find((option) => option.id === protocol)?.label ?? protocol
   );
 }
 
-function presetFor(
-  protocol: ProviderProtocol,
-  presetId: string,
-): ProviderPreset {
-  const presets = presetsByProtocol[protocol];
-  return presets.find((preset) => preset.id === presetId) ?? presets[0];
+function protocolDescription(protocol: ProviderProtocol): string {
+  return (
+    protocolOptions.find((option) => option.id === protocol)?.description ?? ""
+  );
 }
+
+type CatalogueCategory = "vendors" | "platforms" | "cloud" | "local";
+
+interface CatalogueGroup {
+  id: CatalogueCategory;
+  label: string;
+}
+
+const catalogueGroups: CatalogueGroup[] = [
+  { id: "vendors", label: "Model vendors" },
+  { id: "platforms", label: "Third-party platforms and relays" },
+  { id: "cloud", label: "Cloud providers" },
+  { id: "local", label: "Local runtimes" },
+];
+
+interface CatalogueEntry {
+  id: string;
+  name: string;
+  category: CatalogueCategory;
+  protocol: ProviderProtocol;
+  baseUrl: string;
+  model: string;
+  description: string;
+}
+
+const catalogue: CatalogueEntry[] = [
+  // Model vendors
+  {
+    id: "openai",
+    name: "OpenAI",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    model: "gpt-4o",
+    description: "Official OpenAI API",
+  },
+  {
+    id: "anthropic",
+    name: "Anthropic",
+    category: "vendors",
+    protocol: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    model: "claude-sonnet-5-5",
+    description: "Claude models",
+  },
+  {
+    id: "deepseek",
+    name: "DeepSeek",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://api.deepseek.com",
+    model: "deepseek-chat",
+    description: "DeepSeek chat and reasoning models",
+  },
+  {
+    id: "qwen",
+    name: "Qwen",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    description: "Alibaba Qwen models",
+  },
+  {
+    id: "kimi",
+    name: "Kimi",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://api.moonshot.cn/v1",
+    model: "moonshot-v1-8k",
+    description: "Moonshot AI Kimi models",
+  },
+  {
+    id: "zhipu",
+    name: "Zhipu AI",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4.5",
+    description: "GLM models",
+  },
+  {
+    id: "gemini",
+    name: "Google Gemini",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-2.5-pro",
+    description: "Gemini through its OpenAI-compatible endpoint",
+  },
+  {
+    id: "xai",
+    name: "xAI",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://api.x.ai/v1",
+    model: "grok-4",
+    description: "Grok models",
+  },
+  {
+    id: "mistral",
+    name: "Mistral AI",
+    category: "vendors",
+    protocol: "openai",
+    baseUrl: "https://api.mistral.ai/v1",
+    model: "mistral-large-latest",
+    description: "Mistral and Codestral models",
+  },
+  // Third-party platforms and relays
+  {
+    id: "openrouter",
+    name: "OpenRouter",
+    category: "platforms",
+    protocol: "openai",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "openai/gpt-4o",
+    description: "Multi-vendor router",
+  },
+  {
+    id: "siliconflow",
+    name: "SiliconFlow",
+    category: "platforms",
+    protocol: "openai",
+    baseUrl: "https://api.siliconflow.cn/v1",
+    model: "deepseek-ai/DeepSeek-V3",
+    description: "Hosted open models",
+  },
+  {
+    id: "groq",
+    name: "Groq",
+    category: "platforms",
+    protocol: "openai",
+    baseUrl: "https://api.groq.com/openai/v1",
+    model: "llama-3.3-70b-versatile",
+    description: "Low-latency hosted inference",
+  },
+  {
+    id: "together",
+    name: "Together AI",
+    category: "platforms",
+    protocol: "openai",
+    baseUrl: "https://api.together.xyz/v1",
+    model: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    description: "Hosted open models",
+  },
+  {
+    id: "fireworks",
+    name: "Fireworks AI",
+    category: "platforms",
+    protocol: "openai",
+    baseUrl: "https://api.fireworks.ai/inference/v1",
+    model: "accounts/fireworks/models/llama-v3p3-70b-instruct",
+    description: "Hosted open models",
+  },
+  // Cloud providers
+  {
+    id: "volcengine",
+    name: "Volcengine Ark",
+    category: "cloud",
+    protocol: "openai",
+    baseUrl: "https://ark.cn-beijing.volces.com/api/v3",
+    model: "doubao-seed-1-6",
+    description: "ByteDance Doubao models",
+  },
+  {
+    id: "hunyuan",
+    name: "Tencent Cloud Hunyuan",
+    category: "cloud",
+    protocol: "openai",
+    baseUrl: "https://api.hunyuan.cloud.tencent.com/v1",
+    model: "hunyuan-turbos-latest",
+    description: "Tencent Hunyuan models",
+  },
+  {
+    id: "qianfan",
+    name: "Baidu Qianfan",
+    category: "cloud",
+    protocol: "openai",
+    baseUrl: "https://qianfan.baidubce.com/v2",
+    model: "ernie-4.5-turbo-128k",
+    description: "Baidu ERNIE models",
+  },
+  // Local runtimes
+  {
+    id: "ollama",
+    name: "Ollama",
+    category: "local",
+    protocol: "openai",
+    baseUrl: "http://localhost:11434/v1",
+    model: "llama3.2",
+    description: "Local Ollama server on port 11434",
+  },
+  {
+    id: "lmstudio",
+    name: "LM Studio",
+    category: "local",
+    protocol: "openai",
+    baseUrl: "http://localhost:1234/v1",
+    model: "local-model",
+    description: "Local LM Studio server on port 1234",
+  },
+  {
+    id: "vllm",
+    name: "vLLM",
+    category: "local",
+    protocol: "openai",
+    baseUrl: "http://localhost:8000/v1",
+    model: "",
+    description: "Self-hosted OpenAI-compatible server on port 8000",
+  },
+];
 
 interface ProviderDraft {
   providerId: string | null;
   protocol: ProviderProtocol;
-  presetId: string;
   name: string;
   baseUrl: string;
   model: string;
+  models: string[];
   apiKey: string;
   clearApiKey: boolean;
+  /// Whether the free-text model input is shown alongside the dropdown.
+  manualModel: boolean;
 }
 
-interface ModelProviderSettingsProps {
-  /// Hide the configuration file path when embedded in a guided flow.
-  showConfigPath?: boolean;
+interface ModelFetchStatus {
+  ok: boolean;
+  message: string;
 }
 
-function draftForPreset(preset: ProviderPreset): ProviderDraft {
+/// Trim, drop blanks, and collapse duplicates while keeping the first
+/// occurrence of every model.
+function mergeModels(...lists: string[][]): string[] {
+  const merged: string[] = [];
+  for (const list of lists) {
+    for (const raw of list) {
+      const value = raw.trim();
+      if (value && !merged.includes(value)) merged.push(value);
+    }
+  }
+  return merged;
+}
+
+function draftForCatalogueEntry(entry: CatalogueEntry): ProviderDraft {
   return {
     providerId: null,
-    protocol: preset.protocol,
-    presetId: preset.id,
-    name: preset.id === "custom" ? "" : preset.label,
-    baseUrl: preset.baseUrl,
-    model: preset.model,
+    protocol: entry.protocol,
+    name: entry.name,
+    baseUrl: entry.baseUrl,
+    model: entry.model,
+    models: entry.model ? [entry.model] : [],
     apiKey: "",
     clearApiKey: false,
+    manualModel: !entry.model,
+  };
+}
+
+function blankDraft(): ProviderDraft {
+  return {
+    providerId: null,
+    protocol: "openai",
+    name: "",
+    baseUrl: "",
+    model: "",
+    models: [],
+    apiKey: "",
+    clearApiKey: false,
+    manualModel: true,
   };
 }
 
@@ -147,13 +322,23 @@ function draftForProvider(provider: ModelProvider): ProviderDraft {
   return {
     providerId: provider.id,
     protocol: provider.protocol,
-    presetId: "custom",
     name: provider.name,
     baseUrl: provider.base_url,
     model: provider.model,
+    models: mergeModels(provider.models, [provider.model]),
     apiKey: "",
     clearApiKey: false,
+    manualModel: false,
   };
+}
+
+interface ModelProviderSettingsProps {
+  /// Hide the configuration file path when embedded in a guided flow.
+  showConfigPath?: boolean;
+}
+
+function modelCountLabel(count: number): string {
+  return count === 1 ? "1 model" : `${count} models`;
 }
 
 export default function ModelProviderSettings({
@@ -161,9 +346,12 @@ export default function ModelProviderSettings({
 }: ModelProviderSettingsProps) {
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
   const [draft, setDraft] = useState<ProviderDraft | null>(null);
+  const [catalogueOpen, setCatalogueOpen] = useState(false);
+  const [catalogueQuery, setCatalogueQuery] = useState("");
   const [modelBusy, setModelBusy] = useState<string | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
   const [modelNotice, setModelNotice] = useState<string | null>(null);
+  const [fetchStatus, setFetchStatus] = useState<ModelFetchStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,41 +378,49 @@ export default function ModelProviderSettings({
 
   function updateDraft(patch: Partial<ProviderDraft>) {
     setDraft((current) => (current ? { ...current, ...patch } : current));
+    if (
+      patch.protocol !== undefined ||
+      patch.baseUrl !== undefined ||
+      patch.apiKey !== undefined
+    ) {
+      setFetchStatus(null);
+    }
   }
 
-  function startAddProvider() {
-    setDraft(draftForPreset(presetsByProtocol.openai[0]));
+  function resetTransientState() {
     setModelError(null);
     setModelNotice(null);
+    setFetchStatus(null);
+  }
+
+  function openCatalogue() {
+    setDraft(null);
+    setCatalogueOpen(true);
+    setCatalogueQuery("");
+    resetTransientState();
+  }
+
+  function closeCatalogue() {
+    setCatalogueOpen(false);
+    setCatalogueQuery("");
+  }
+
+  function chooseCatalogueEntry(entry: CatalogueEntry | null) {
+    setDraft(entry ? draftForCatalogueEntry(entry) : blankDraft());
+    setCatalogueOpen(false);
+    resetTransientState();
   }
 
   function startEditProvider(provider: ModelProvider) {
     setDraft(draftForProvider(provider));
-    setModelError(null);
-    setModelNotice(null);
+    setCatalogueOpen(false);
+    resetTransientState();
   }
 
   function changeProtocol(protocol: ProviderProtocol) {
-    if (!draft) return;
-    const preset = presetsByProtocol[protocol][0];
-    updateDraft({
-      protocol,
-      presetId: preset.id,
-      name: draft.providerId ? draft.name : preset.label,
-      baseUrl: preset.baseUrl,
-      model: preset.model,
-    });
-  }
-
-  function changePreset(presetId: string) {
-    if (!draft) return;
-    const preset = presetFor(draft.protocol, presetId);
-    updateDraft({
-      presetId,
-      name: preset.id === "custom" ? draft.name : preset.label,
-      baseUrl: preset.baseUrl,
-      model: preset.model,
-    });
+    // Keep the name, base URL, model list, and active model the user has
+    // entered; the protocol only changes how the endpoint is called.
+    updateDraft({ protocol });
   }
 
   async function handleSaveProvider(event: FormEvent<HTMLFormElement>) {
@@ -240,6 +436,7 @@ export default function ModelProviderSettings({
         protocol: draft.protocol,
         name: draft.name,
         baseUrl: draft.baseUrl,
+        models: mergeModels(draft.models, [draft.model]),
         model: draft.model,
         apiKey: draft.apiKey,
         clearApiKey: draft.clearApiKey,
@@ -249,6 +446,38 @@ export default function ModelProviderSettings({
       setModelNotice(draft.providerId ? "Provider updated." : "Provider added.");
     } catch (error) {
       setModelError(errorMessage(error));
+    } finally {
+      setModelBusy(null);
+    }
+  }
+
+  async function handleFetchModels() {
+    if (!draft) return;
+
+    setModelBusy("fetch-models");
+    setFetchStatus(null);
+    try {
+      const models = await fetchProviderModels({
+        providerId: draft.providerId,
+        protocol: draft.protocol,
+        baseUrl: draft.baseUrl,
+        apiKey: draft.apiKey,
+      });
+      setDraft((current) => {
+        if (!current) return current;
+        const merged = mergeModels(current.models, models);
+        return {
+          ...current,
+          models: merged,
+          model: current.model.trim() ? current.model : (merged[0] ?? ""),
+        };
+      });
+      setFetchStatus({
+        ok: true,
+        message: `Fetched ${modelCountLabel(models.length)} from the endpoint.`,
+      });
+    } catch (error) {
+      setFetchStatus({ ok: false, message: errorMessage(error) });
     } finally {
       setModelBusy(null);
     }
@@ -351,6 +580,21 @@ export default function ModelProviderSettings({
     return <p className="settings-empty">Loading model settings…</p>;
   }
 
+  const query = catalogueQuery.trim().toLowerCase();
+  const filteredCatalogue = query
+    ? catalogue.filter((entry) =>
+        [
+          entry.name,
+          entry.description,
+          entry.baseUrl,
+          protocolLabel(entry.protocol),
+        ].some((value) => value.toLowerCase().includes(query)),
+      )
+    : catalogue;
+  const modelOptions = draft
+    ? mergeModels(draft.models, [draft.model])
+    : [];
+
   return (
     <>
       <div className="settings-active">
@@ -393,7 +637,8 @@ export default function ModelProviderSettings({
                 ) : null}
               </div>
               <p className="settings-card-body">
-                {provider.model} · {provider.base_url}
+                {provider.model} · {modelCountLabel(provider.models.length)} ·{" "}
+                {provider.base_url}
               </p>
               <div className="settings-card-foot">
                 <span className="settings-meta-inline">
@@ -443,40 +688,9 @@ export default function ModelProviderSettings({
 
       {draft ? (
         <form className="settings-form provider-editor" onSubmit={handleSaveProvider}>
-          <div className="protocol-choice" role="group" aria-label="API protocol">
-            {protocolOptions.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`protocol-option${
-                  draft.protocol === option.id ? " is-selected" : ""
-                }`}
-                aria-pressed={draft.protocol === option.id}
-                onClick={() => changeProtocol(option.id)}
-                disabled={modelBusy !== null}
-              >
-                <span className="protocol-option-label">{option.label}</span>
-                <span className="protocol-option-hint">{option.description}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="preset-row" role="group" aria-label="Provider presets">
-            {presetsByProtocol[draft.protocol].map((preset) => (
-              <button
-                key={preset.id}
-                type="button"
-                className={`preset-chip${
-                  draft.presetId === preset.id ? " is-selected" : ""
-                }`}
-                aria-pressed={draft.presetId === preset.id}
-                onClick={() => changePreset(preset.id)}
-                disabled={modelBusy !== null}
-              >
-                {preset.label}
-              </button>
-            ))}
-          </div>
+          <p className="settings-card-title">
+            {draft.providerId ? "Edit provider" : "New provider"}
+          </p>
 
           <div className="settings-form-row">
             <label className="field">
@@ -489,15 +703,24 @@ export default function ModelProviderSettings({
               />
             </label>
             <label className="field">
-              <span>Model</span>
-              <input
-                value={draft.model}
-                onChange={(event) => updateDraft({ model: event.target.value })}
-                placeholder="gpt-4o"
-                autoComplete="off"
-              />
+              <span>Protocol</span>
+              <select
+                value={draft.protocol}
+                onChange={(event) =>
+                  changeProtocol(event.target.value as ProviderProtocol)
+                }
+                disabled={modelBusy !== null}
+              >
+                {protocolOptions.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
+
+          <p className="settings-hint">{protocolDescription(draft.protocol)}</p>
 
           <label className="field">
             <span>Base URL</span>
@@ -512,6 +735,67 @@ export default function ModelProviderSettings({
               autoComplete="off"
             />
           </label>
+
+          <div className="field">
+            <span>Models</span>
+            <div className="model-toolbar">
+              <select
+                aria-label="Active model"
+                value={draft.model}
+                onChange={(event) => updateDraft({ model: event.target.value })}
+                disabled={modelBusy !== null}
+              >
+                {draft.model === "" ? (
+                  <option value="">Select a model</option>
+                ) : null}
+                {modelOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={handleFetchModels}
+                disabled={modelBusy !== null || !draft.baseUrl.trim()}
+              >
+                {modelBusy === "fetch-models" ? "Fetching…" : "Fetch models"}
+              </button>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() =>
+                  updateDraft({ manualModel: !draft.manualModel })
+                }
+                disabled={modelBusy !== null}
+              >
+                {draft.manualModel ? "Hide manual entry" : "Add manually"}
+              </button>
+            </div>
+            {draft.manualModel ? (
+              <input
+                aria-label="Model name"
+                value={draft.model}
+                onChange={(event) => updateDraft({ model: event.target.value })}
+                placeholder="gpt-4o"
+                autoComplete="off"
+              />
+            ) : null}
+            {fetchStatus ? (
+              <p
+                className={`model-status ${fetchStatus.ok ? "is-ok" : "is-error"}`}
+                role={fetchStatus.ok ? "status" : "alert"}
+              >
+                {fetchStatus.message}
+              </p>
+            ) : null}
+            <span className="settings-hint">
+              {draft.models.length > 0
+                ? `${modelCountLabel(draft.models.length)} known for this provider. Fetch again to refresh, or add a name by hand.`
+                : "Fetch the endpoint's model list, or add a model name by hand."}
+            </span>
+          </div>
 
           <label className="field">
             <span>API key</span>
@@ -591,9 +875,78 @@ export default function ModelProviderSettings({
             protect it as sensitive local data.
           </p>
         </form>
+      ) : catalogueOpen ? (
+        <div className="provider-catalogue">
+          <div className="catalogue-toolbar">
+            <input
+              className="catalogue-search"
+              value={catalogueQuery}
+              onChange={(event) => setCatalogueQuery(event.target.value)}
+              placeholder="Search providers by name or URL"
+              aria-label="Search providers"
+              autoComplete="off"
+              autoFocus
+            />
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={closeCatalogue}
+            >
+              Cancel
+            </button>
+          </div>
+
+          <button
+            type="button"
+            className="catalogue-custom"
+            onClick={() => chooseCatalogueEntry(null)}
+          >
+            <span className="catalogue-entry-label">Custom</span>
+            <span className="catalogue-entry-hint">
+              Start from a blank form and enter any compatible endpoint.
+            </span>
+          </button>
+
+          {catalogueGroups.map((group) => {
+            const entries = filteredCatalogue.filter(
+              (entry) => entry.category === group.id,
+            );
+            if (entries.length === 0) return null;
+            return (
+              <section key={group.id} className="catalogue-group">
+                <h4 className="catalogue-group-title">{group.label}</h4>
+                <ul className="catalogue-list">
+                  {entries.map((entry) => (
+                    <li key={entry.id}>
+                      <button
+                        type="button"
+                        className="catalogue-entry"
+                        onClick={() => chooseCatalogueEntry(entry)}
+                      >
+                        <span className="catalogue-entry-label">
+                          {entry.name}
+                        </span>
+                        <span className="catalogue-entry-hint">
+                          {entry.description} · {entry.baseUrl}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+
+          {filteredCatalogue.length === 0 ? (
+            <p className="settings-empty">
+              No providers match “{catalogueQuery.trim()}”. Choose Custom to
+              enter an endpoint by hand.
+            </p>
+          ) : null}
+        </div>
       ) : (
         <>
-          <button type="button" className="settings-add-button" onClick={startAddProvider}>
+          <button type="button" className="settings-add-button" onClick={openCatalogue}>
             <span aria-hidden="true">+</span> Add provider
           </button>
           {status}

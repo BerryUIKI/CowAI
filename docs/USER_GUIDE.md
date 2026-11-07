@@ -49,20 +49,33 @@ You can skip setup at any point. Everything is available later in **Settings**
 Open **Settings → Model**. Providers are model endpoints; CowBot ships with an
 offline mock model and uses it whenever no provider is active.
 
-1. Choose a protocol:
+1. **Add provider** opens a vendor catalogue grouped into model vendors,
+   third-party platforms and relays, cloud providers, and local runtimes. Search
+   the catalogue by name or URL.
+2. Pick a vendor to pre-fill the form, or **Custom** for a blank form and any
+   compatible endpoint. Every field stays editable.
+3. **Protocol** is a dropdown in the form:
    - **OpenAI Chat** — the Chat Completions API, used by OpenAI, DeepSeek,
      Ollama, OpenRouter, and most relays.
    - **Anthropic** — the Messages API, used by Claude and Claude
      Code-compatible relays.
    - **Responses** — the OpenAI Responses API, used by Codex-style endpoints.
-2. Pick a preset (**OpenAI**, **DeepSeek**, **Ollama**, **Claude**, **OpenAI
-   Responses**) or **Custom**. Presets fill the base URL and model; you can edit
-   both.
-3. Enter the API key if the endpoint needs one. Local endpoints usually do not.
-4. **Test connection** sends one small request. The result appears in the
+
+   Changing the protocol keeps the name, base URL, and model you entered.
+4. **Fetch models** asks the endpoint which models the key can use and adds them
+   to the model dropdown. Pick the active model there. If the endpoint has no
+   usable listing, the error appears beside the field; use **Add manually** to
+   type a model name instead. Discovery is optional and never blocks saving.
+5. Enter the API key if the endpoint needs one. Local endpoints usually do not.
+6. **Test connection** sends one small request. The result appears in the
    editor.
-5. **Save provider**. The first provider becomes active; use **Use** on another
-   card to switch, or **Use offline mock** to run without a model.
+7. **Save provider**. The first provider becomes active; use **Use** on another
+   card to switch, or **Use offline mock** to run without a model. Each card
+   shows its active model and how many models the provider knows.
+
+A provider can hold several models. To change the active one, choose **Edit**,
+pick another model, and save; the stored API key is kept, so you never retype
+it.
 
 The base URL may be a bare host (`https://api.anthropic.com`), include `/v1`, or
 be the full endpoint (`https://api.anthropic.com/v1/messages`). CowBot appends
@@ -79,6 +92,9 @@ file as sensitive data.
 - **404** — the endpoint is reachable but does not serve the selected protocol.
   Check that the protocol matches the provider (for example, a Claude relay
   needs **Anthropic**, not **OpenAI Chat**).
+- **Model listing failed** — the endpoint does not expose a models catalogue, or
+  it returned an unexpected shape. Type the model name with **Add manually** and
+  continue.
 
 ## Workspaces
 

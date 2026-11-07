@@ -334,6 +334,7 @@ pub struct ProviderView {
     pub name: String,
     pub protocol: config::ProviderProtocol,
     pub base_url: String,
+    pub models: Vec<String>,
     pub model: String,
     pub has_api_key: bool,
     pub active: bool,
@@ -373,6 +374,7 @@ fn model_settings(state: &AppState, config: &config::AppConfig) -> ModelSettings
             name: provider.name.clone(),
             protocol: provider.protocol,
             base_url: provider.base_url.clone(),
+            models: provider.models.clone(),
             model: provider.model.clone(),
             has_api_key: provider.api_key.is_some(),
             active: active_id.as_deref() == Some(provider.id.as_str()),
@@ -405,6 +407,8 @@ pub struct ProviderDraft {
     pub protocol: config::ProviderProtocol,
     pub name: String,
     pub base_url: String,
+    #[serde(default)]
+    pub models: Vec<String>,
     pub model: String,
     #[serde(default)]
     pub api_key: Option<String>,
@@ -436,6 +440,7 @@ fn upsert_provider(config: &mut config::AppConfig, draft: &ProviderDraft) -> Res
                 &draft.name,
                 draft.protocol,
                 &draft.base_url,
+                &draft.models,
                 &draft.model,
                 key.as_deref(),
             )?;
@@ -447,6 +452,7 @@ fn upsert_provider(config: &mut config::AppConfig, draft: &ProviderDraft) -> Res
                 &draft.name,
                 draft.protocol,
                 &draft.base_url,
+                &draft.models,
                 &draft.model,
                 typed_key.as_deref(),
             )?);
@@ -841,6 +847,39 @@ pub async fn test_model_provider(
     }
 }
 
+/// List the model ids an endpoint reports, using its saved key when none is
+/// typed.
+///
+/// The listing shape differs between protocols, so the request goes through
+/// the protocol client rather than a shared HTTP helper.
+#[tauri::command]
+pub async fn fetch_provider_models(
+    state: State<'_, AppState>,
+    provider_id: Option<String>,
+    protocol: config::ProviderProtocol,
+    base_url: String,
+    api_key: Option<String>,
+) -> Result<Vec<String>, String> {
+    let config = load_config(&state)?;
+    let stored_key = provider_id
+        .as_deref()
+        .and_then(|id| config.provider(id))
+        .and_then(|provider| provider.api_key.clone());
+    let api_key = config::normalize_api_key(api_key.as_deref()).or(stored_key);
+    let base_url = config::normalize_base_url(&base_url)?;
+    let provider = config::build_remote_provider(protocol, &base_url, api_key);
+
+    let models = tokio::time::timeout(Duration::from_secs(30), provider.list_models())
+        .await
+        .map_err(|_| "The provider did not respond within 30 seconds.".to_string())?
+        .map_err(|error| error.to_string())?;
+
+    if models.is_empty() {
+        return Err("The endpoint returned no models.".to_string());
+    }
+    Ok(models)
+}
+
 fn summarize_reply(reply: &str) -> String {
     const LIMIT: usize = 120;
     let mut summary: String = reply.chars().take(LIMIT).collect();
@@ -860,6 +899,7 @@ mod tests {
             protocol: config::ProviderProtocol::OpenAi,
             name: name.to_string(),
             base_url: base_url.to_string(),
+            models: vec![model.to_string()],
             model: model.to_string(),
             api_key: api_key.map(str::to_string),
             clear_api_key: false,
@@ -873,6 +913,7 @@ mod tests {
             "protocol": "anthropic",
             "name": "Claude",
             "baseUrl": "https://api.anthropic.com",
+            "models": ["claude-sonnet-5-5", "claude-opus-5-5"],
             "model": "claude-sonnet-5-5",
             "apiKey": "secret",
             "clearApiKey": false
@@ -882,6 +923,13 @@ mod tests {
         assert_eq!(draft.provider_id.as_deref(), Some("p1"));
         assert_eq!(draft.protocol, config::ProviderProtocol::Anthropic);
         assert_eq!(draft.base_url, "https://api.anthropic.com");
+        assert_eq!(
+            draft.models,
+            vec![
+                "claude-sonnet-5-5".to_string(),
+                "claude-opus-5-5".to_string()
+            ]
+        );
         assert_eq!(draft.api_key.as_deref(), Some("secret"));
         assert!(!draft.clear_api_key);
     }
@@ -954,6 +1002,57 @@ mod tests {
 
         assert_eq!(settings.providers[0].name, "Renamed");
         assert_eq!(settings.providers[0].base_url, "https://api.example.com/v1");
+        assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
+    }
+
+    #[test]
+    fn saving_a_provider_keeps_every_model() {
+        let mut settings = config::AppConfig::default();
+        let mut openai = draft(
+            "OpenAI",
+            "https://api.openai.com/v1",
+            "gpt-4o",
+            Some("secret"),
+        );
+        openai.models = vec![
+            "gpt-4o".to_string(),
+            "gpt-4o-mini".to_string(),
+            "gpt-4o".to_string(),
+        ];
+
+        upsert_provider(&mut settings, &openai).unwrap();
+
+        assert_eq!(
+            settings.providers[0].models,
+            vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()]
+        );
+    }
+
+    #[test]
+    fn switching_the_active_model_keeps_the_stored_key() {
+        let mut settings = config::AppConfig::default();
+        upsert_provider(
+            &mut settings,
+            &draft(
+                "OpenAI",
+                "https://api.openai.com/v1",
+                "gpt-4o",
+                Some("secret"),
+            ),
+        )
+        .unwrap();
+        let id = settings.providers[0].id.clone();
+
+        let mut update = draft("OpenAI", "https://api.openai.com/v1", "gpt-4o-mini", None);
+        update.provider_id = Some(id);
+        update.models = vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()];
+        upsert_provider(&mut settings, &update).unwrap();
+
+        assert_eq!(settings.providers[0].model, "gpt-4o-mini");
+        assert_eq!(
+            settings.providers[0].models,
+            vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()]
+        );
         assert_eq!(settings.providers[0].api_key.as_deref(), Some("secret"));
     }
 

@@ -184,6 +184,7 @@ export interface ModelProvider {
   name: string;
   protocol: ProviderProtocol;
   base_url: string;
+  models: string[];
   model: string;
   has_api_key: boolean;
   active: boolean;

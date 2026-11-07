@@ -1,9 +1,10 @@
+use crate::endpoint::parse_model_ids;
 use crate::provider::LlmProvider;
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse, LlmToolCall};
 use async_trait::async_trait;
 use cowbot_core::error::{CowError, CowResult};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Value};
 use tracing::{debug, error};
 
 /// Generic client for any OpenAI-compatible API endpoint.
@@ -34,6 +35,10 @@ impl OpenAiCompatibleProvider {
     pub fn ollama(base_url: Option<String>) -> Self {
         let url = base_url.unwrap_or_else(|| "http://localhost:11434/v1".to_string());
         Self::new(url, None)
+    }
+
+    fn models_url(&self) -> String {
+        format!("{}/models", self.base_url)
     }
 }
 
@@ -165,5 +170,57 @@ impl LlmProvider for OpenAiCompatibleProvider {
             tool_calls,
             finish_reason: choice.finish_reason,
         })
+    }
+
+    async fn list_models(&self) -> CowResult<Vec<String>> {
+        let url = self.models_url();
+        debug!(url = %url, "Fetching OpenAI-compatible model list");
+
+        let mut http = self.client.get(&url);
+        if let Some(key) = &self.api_key {
+            http = http.bearer_auth(key);
+        }
+
+        let response = http
+            .send()
+            .await
+            .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let err_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            error!(status = %status, body = %err_text, "Model list request returned non-200 status");
+            return Err(CowError::Llm(format!(
+                "API returned error status {}: {}",
+                status, err_text
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| CowError::Llm(format!("Failed to parse response JSON: {}", e)))?;
+
+        parse_model_ids(&payload)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn models_url_appends_to_the_configured_base() {
+        assert_eq!(
+            OpenAiCompatibleProvider::new("https://api.openai.com/v1", None).models_url(),
+            "https://api.openai.com/v1/models"
+        );
+        assert_eq!(
+            OpenAiCompatibleProvider::new("https://api.deepseek.com/", None).models_url(),
+            "https://api.deepseek.com/models"
+        );
     }
 }

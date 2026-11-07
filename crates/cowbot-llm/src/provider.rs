@@ -1,6 +1,6 @@
 use crate::types::{ChatCompletionRequest, ChatCompletionResponse};
 use async_trait::async_trait;
-use cowbot_core::error::CowResult;
+use cowbot_core::error::{CowError, CowResult};
 
 /// Trait implemented by LLM backend providers.
 #[async_trait]
@@ -13,4 +13,15 @@ pub trait LlmProvider: Send + Sync {
         &self,
         request: &ChatCompletionRequest,
     ) -> CowResult<ChatCompletionResponse>;
+
+    /// Lists the model ids the endpoint reports.
+    ///
+    /// Providers without a usable catalogue keep the default, which reports
+    /// model discovery as unsupported so callers can fall back to manual entry.
+    async fn list_models(&self) -> CowResult<Vec<String>> {
+        Err(CowError::Llm(format!(
+            "{} does not support model discovery",
+            self.name()
+        )))
+    }
 }

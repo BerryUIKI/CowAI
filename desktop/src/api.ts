@@ -129,6 +129,7 @@ export function saveModelProvider(input: {
   protocol: ProviderProtocol;
   name: string;
   baseUrl: string;
+  models: string[];
   model: string;
   apiKey: string;
   clearApiKey: boolean;
@@ -139,6 +140,7 @@ export function saveModelProvider(input: {
       protocol: input.protocol,
       name: input.name,
       baseUrl: input.baseUrl,
+      models: input.models,
       model: input.model,
       apiKey: input.apiKey,
       clearApiKey: input.clearApiKey,
@@ -166,6 +168,20 @@ export function testModelProvider(input: {
     protocol: input.protocol,
     baseUrl: input.baseUrl,
     model: input.model,
+    apiKey: input.apiKey,
+  });
+}
+
+export function fetchProviderModels(input: {
+  providerId: string | null;
+  protocol: ProviderProtocol;
+  baseUrl: string;
+  apiKey: string;
+}): Promise<string[]> {
+  return invoke<string[]>("fetch_provider_models", {
+    providerId: input.providerId,
+    protocol: input.protocol,
+    baseUrl: input.baseUrl,
     apiKey: input.apiKey,
   });
 }
