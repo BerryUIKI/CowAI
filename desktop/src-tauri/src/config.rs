@@ -61,6 +61,13 @@ pub struct ProviderConfig {
     #[serde(default)]
     pub protocol: ProviderProtocol,
     pub base_url: String,
+    /// Models known for this provider, fetched or added by hand.
+    ///
+    /// Missing in files written before model discovery existed; those
+    /// providers load with their active model as the only entry.
+    #[serde(default)]
+    pub models: Vec<String>,
+    /// The active model used for runs.
     pub model: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub api_key: Option<String>,
@@ -171,12 +178,18 @@ pub fn resolve_database_path(data_dir: &Path, database: &str) -> Result<PathBuf,
 /// Load the configuration, treating a missing file as the default.
 pub fn load(path: &Path) -> io::Result<AppConfig> {
     match fs::read_to_string(path) {
-        Ok(contents) => serde_json::from_str(&contents).map_err(|error| {
-            io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("invalid configuration: {error}"),
-            )
-        }),
+        Ok(contents) => {
+            let mut config: AppConfig = serde_json::from_str(&contents).map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("invalid configuration: {error}"),
+                )
+            })?;
+            for provider in &mut config.providers {
+                provider.models = normalized_models(&provider.models, &provider.model);
+            }
+            Ok(config)
+        }
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(AppConfig::default()),
         Err(error) => Err(error),
     }
@@ -222,6 +235,22 @@ fn restrict_permissions(_path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+/// Normalize a provider's model list: trim entries, drop blanks and
+/// duplicates, and make sure the active model is present.
+fn normalized_models(models: &[String], active_model: &str) -> Vec<String> {
+    let mut normalized: Vec<String> = Vec::new();
+    for model in models {
+        let model = model.trim();
+        if !model.is_empty() && !normalized.iter().any(|known| known == model) {
+            normalized.push(model.to_string());
+        }
+    }
+    if !normalized.iter().any(|model| model == active_model) {
+        normalized.push(active_model.to_string());
+    }
+    normalized
+}
+
 /// Validated provider fields, trimmed and normalized.
 pub fn validate_endpoint(base_url: &str, model: &str) -> Result<(String, String), String> {
     let base_url = normalize_base_url(base_url)?;
@@ -257,6 +286,7 @@ pub fn make_provider(
     name: &str,
     protocol: ProviderProtocol,
     base_url: &str,
+    models: &[String],
     model: &str,
     api_key: Option<&str>,
 ) -> Result<ProviderConfig, String> {
@@ -270,6 +300,7 @@ pub fn make_provider(
         name: name.to_string(),
         protocol,
         base_url,
+        models: normalized_models(models, &model),
         model,
         api_key: normalize_api_key(api_key),
     })
@@ -316,20 +347,24 @@ pub fn resolve_active(config: &AppConfig) -> ResolvedModel {
 pub fn build_provider(resolved: &ResolvedModel) -> Arc<dyn LlmProvider> {
     match resolved.kind {
         ProviderKind::Mock => Arc::new(MockLlmProvider::echo()),
-        ProviderKind::Remote(ProviderProtocol::OpenAi) => Arc::new(OpenAiCompatibleProvider::new(
-            resolved.base_url.clone().unwrap_or_default(),
+        ProviderKind::Remote(protocol) => build_remote_provider(
+            protocol,
+            resolved.base_url.as_deref().unwrap_or_default(),
             resolved.api_key.clone(),
-        )),
-        ProviderKind::Remote(ProviderProtocol::Anthropic) => Arc::new(AnthropicProvider::new(
-            resolved.base_url.clone().unwrap_or_default(),
-            resolved.api_key.clone(),
-        )),
-        ProviderKind::Remote(ProviderProtocol::OpenAiResponses) => {
-            Arc::new(ResponsesProvider::new(
-                resolved.base_url.clone().unwrap_or_default(),
-                resolved.api_key.clone(),
-            ))
-        }
+        ),
+    }
+}
+
+/// Build a remote LLM client for a protocol and endpoint.
+pub fn build_remote_provider(
+    protocol: ProviderProtocol,
+    base_url: &str,
+    api_key: Option<String>,
+) -> Arc<dyn LlmProvider> {
+    match protocol {
+        ProviderProtocol::OpenAi => Arc::new(OpenAiCompatibleProvider::new(base_url, api_key)),
+        ProviderProtocol::Anthropic => Arc::new(AnthropicProvider::new(base_url, api_key)),
+        ProviderProtocol::OpenAiResponses => Arc::new(ResponsesProvider::new(base_url, api_key)),
     }
 }
 
@@ -343,6 +378,7 @@ mod tests {
             name: name.to_string(),
             protocol: ProviderProtocol::OpenAi,
             base_url: "https://api.example.com/v1".to_string(),
+            models: vec!["example-model".to_string()],
             model: "example-model".to_string(),
             api_key: Some("secret".to_string()),
         }
@@ -581,6 +617,79 @@ mod tests {
     }
 
     #[test]
+    fn providers_without_models_load_with_the_active_model() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"active_provider_id":"p1","providers":[{"id":"p1","name":"Legacy","base_url":"https://api.example.com/v1","model":"legacy-model"}]}"#,
+        )
+        .unwrap();
+
+        let config = load(&path).unwrap();
+
+        assert_eq!(config.providers[0].models, vec!["legacy-model".to_string()]);
+    }
+
+    #[test]
+    fn loaded_models_are_deduplicated_and_include_the_active_one() {
+        let root = tempfile::tempdir().unwrap();
+        let path = config_path(root.path());
+        fs::write(
+            &path,
+            r#"{"version":1,"active_provider_id":"p1","providers":[{"id":"p1","name":"Hand edited","base_url":"https://api.example.com/v1","models":["gpt-4o"," gpt-4o ","","gpt-4o-mini"],"model":"gpt-4o-mini"}]}"#,
+        )
+        .unwrap();
+
+        let config = load(&path).unwrap();
+
+        assert_eq!(
+            config.providers[0].models,
+            vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()]
+        );
+    }
+
+    #[test]
+    fn saved_models_are_normalized_and_include_the_active_model() {
+        let provider = make_provider(
+            "id".into(),
+            "Name",
+            ProviderProtocol::OpenAi,
+            "https://a.test/v1",
+            &[
+                "gpt-4o".to_string(),
+                " gpt-4o ".to_string(),
+                " ".to_string(),
+                "gpt-4o-mini".to_string(),
+            ],
+            "gpt-4o-mini",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            provider.models,
+            vec!["gpt-4o".to_string(), "gpt-4o-mini".to_string()]
+        );
+
+        let provider = make_provider(
+            "id".into(),
+            "Name",
+            ProviderProtocol::OpenAi,
+            "https://a.test/v1",
+            &["gpt-4o".to_string()],
+            "o3",
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            provider.models,
+            vec!["gpt-4o".to_string(), "o3".to_string()]
+        );
+    }
+
+    #[test]
     fn base_url_requires_an_absolute_http_url() {
         assert!(normalize_base_url("api.example.com/v1").is_err());
         assert!(normalize_base_url("ftp://api.example.com").is_err());
@@ -598,18 +707,27 @@ mod tests {
             " ",
             ProviderProtocol::OpenAi,
             "https://a.test/v1",
+            &[],
             "m",
             None
         )
         .is_err());
-        assert!(
-            make_provider("id".into(), "Name", ProviderProtocol::OpenAi, "", "m", None).is_err()
-        );
+        assert!(make_provider(
+            "id".into(),
+            "Name",
+            ProviderProtocol::OpenAi,
+            "",
+            &[],
+            "m",
+            None
+        )
+        .is_err());
         assert!(make_provider(
             "id".into(),
             "Name",
             ProviderProtocol::OpenAi,
             "https://a.test/v1",
+            &[],
             " ",
             None
         )
@@ -619,6 +737,7 @@ mod tests {
             "Name",
             ProviderProtocol::Anthropic,
             "https://a.test/v1",
+            &[],
             "m",
             None
         )
