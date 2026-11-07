@@ -177,22 +177,43 @@ versions update themselves.
 ## Command line
 
 The `cowbot` CLI covers headless and scripted use. It does not read the desktop
-`config.json`; it takes flags and environment variables.
+`config.json`; it reads an optional `cowbot.toml` from the working directory and
+takes flags and environment variables.
+
+```toml
+# cowbot.toml
+db = "cowbot.db"
+model = "gpt-4o"
+base_url = "https://api.openai.com/v1"
+approval = "ask"       # ask | safe-auto | plan-only | trusted
+concurrency = 4        # cross-root concurrency limit
+```
+
+Lookup order is `--config <path>`, then `COWBOT_CONFIG`, then `cowbot.toml` in
+the working directory. Command-line values and environment variables override
+the file. API keys are never read from the file; use `OPENAI_API_KEY`.
 
 ```bash
-cowbot init --db cowbot.db
-cowbot run --task "Analyze and write code" --dry-run
-cowbot run --task "Fix the bug" --model gpt-4o --approval ask
+cowbot init
+cowbot channel create --name general --topic "General"
+cowbot channel list
+cowbot message post --channel <id> --content "Starting the run"
+cowbot message list --channel <id>
+cowbot run --task "Analyze and write code" --dry-run --channel <id>
+cowbot run --task "Fix the bug" --model gpt-4o --approval ask --concurrency 2
 cowbot tools
 cowbot export --output my-workspace.cowpkg --db cowbot.db
 cowbot import --input my-workspace.cowpkg --db other.db
 ```
 
-- CLI `--db` defaults to `COWBOT_DB`, then `cowbot.db` in the working directory.
+- `--db` / `COWBOT_DB` overrides the configured database; the default is
+  `cowbot.db` in the working directory.
 - `--dry-run` forces the offline mock model.
 - `--model`, `--base-url` (`OPENAI_BASE_URL`), and `--api-key`
   (`OPENAI_API_KEY`) configure the OpenAI Chat Completions endpoint.
 - `--approval` accepts `ask`, `safe-auto`, `plan-only`, and `trusted`.
+- `--concurrency` bounds how many root assignments run at the same time.
+- `run --channel <id>` stores the crew's tasks in that channel.
 
 ## Troubleshooting
 
