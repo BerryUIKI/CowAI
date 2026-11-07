@@ -1407,16 +1407,39 @@ button {
   gap: 14px;
 }
 
-.protocol-choice {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.provider-catalogue {
+  max-width: 720px;
+  margin-top: 14px;
+}
+
+.catalogue-toolbar {
+  display: flex;
   gap: 8px;
 }
 
-.protocol-option {
+.catalogue-search {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--rule-strong);
+  border-radius: 6px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 13px;
+}
+
+.catalogue-search:focus {
+  outline: none;
+  border-color: var(--brass);
+  box-shadow: 0 0 0 3px var(--brass-soft);
+}
+
+.catalogue-custom,
+.catalogue-entry {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--rule);
   border-radius: 8px;
@@ -1425,51 +1448,77 @@ button {
   text-align: left;
 }
 
-.protocol-option:hover {
+.catalogue-custom {
+  margin-top: 10px;
+  border-style: dashed;
+}
+
+.catalogue-custom:hover,
+.catalogue-entry:hover {
   border-color: rgba(201, 166, 107, 0.32);
-  color: var(--paper);
+  background: rgba(255, 255, 255, 0.02);
 }
 
-.protocol-option.is-selected {
-  border-color: var(--brass);
-  background: var(--brass-soft);
+.catalogue-entry-label {
   color: var(--paper);
-}
-
-.protocol-option-label {
   font-size: 13px;
   font-weight: 600;
 }
 
-.protocol-option-hint {
+.catalogue-entry-hint {
   color: var(--paper-faint);
   font-size: 11px;
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-.preset-row {
+.catalogue-group {
+  margin-top: 18px;
+}
+
+.catalogue-group-title {
+  margin: 0 0 8px;
+  color: var(--paper-faint);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.catalogue-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-toolbar {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
 }
 
-.preset-chip {
-  padding: 4px 10px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--paper-dim);
+.model-toolbar select {
+  flex: 1;
+  min-width: 180px;
+}
+
+.model-status {
+  margin: 0;
   font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
-.preset-chip:hover {
-  color: var(--paper);
+.model-status.is-ok {
+  color: var(--sage);
 }
 
-.preset-chip.is-selected {
-  border-color: var(--brass);
-  background: var(--brass-soft);
-  color: var(--paper);
+.model-status.is-error {
+  color: var(--danger);
 }
 
 .settings-checkbox {
@@ -1895,7 +1944,7 @@ button {
     white-space: nowrap;
   }
 
-  .protocol-choice {
+  .catalogue-list {
     grid-template-columns: 1fr;
   }
 
