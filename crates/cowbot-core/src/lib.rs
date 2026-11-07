@@ -6,6 +6,7 @@ pub mod channel;
 pub mod error;
 pub mod event;
 pub mod identity;
+pub mod mention;
 pub mod risk;
 pub mod run;
 pub mod task;
@@ -26,6 +27,7 @@ pub use event::{Event, EventPayload};
 pub use identity::{
     ApiToken, Invite, Membership, Role, Session, User, UserId, Workspace, WorkspaceId,
 };
+pub use mention::{parse_mentions, resolve_mentions, MentionResolution};
 pub use risk::RiskLevel;
 pub use run::{Run, RunId, RunStatus, ToolCallRecord};
 pub use task::{Task, TaskId, TaskStatus};

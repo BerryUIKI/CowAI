@@ -356,3 +356,60 @@ async fn an_assignment_without_an_executor_is_failed() {
     assert_eq!(assignments.len(), 1);
     assert_eq!(assignments[0].status, AssignmentStatus::Failed);
 }
+
+#[tokio::test]
+async fn a_scoped_scheduler_claims_only_its_own_roots() {
+    let (store, workspace_id) = setup().await;
+    let own_agent = StandardRoles::planner();
+    let foreign_agent = StandardRoles::coder();
+
+    let mut owners = AssignmentScheduler::new(
+        store.clone(),
+        EventBus::default_bus(),
+        workspace_id.clone(),
+        2,
+    )
+    .with_scope();
+    owners.register_agent(
+        own_agent.clone(),
+        Arc::new(MockLlmProvider::echo()),
+        ToolRegistry::new(),
+        "mock-model",
+    );
+    let own_task = Task::new("Owned work", "Output").assign_to(own_agent.id.clone());
+    owners
+        .enqueue(&own_task, requester(), AssignmentOrigin::User, &options(2))
+        .await
+        .unwrap();
+
+    // Another caller queued work that this scoped scheduler did not create; it
+    // must leave that root alone so the two runs cannot race for it.
+    let foreign = AssignmentScheduler::new(
+        store.clone(),
+        EventBus::default_bus(),
+        workspace_id.clone(),
+        2,
+    );
+    let foreign_task = Task::new("Foreign work", "Output").assign_to(foreign_agent.id.clone());
+    foreign
+        .enqueue(
+            &foreign_task,
+            requester(),
+            AssignmentOrigin::User,
+            &options(2),
+        )
+        .await
+        .unwrap();
+
+    let completed = owners.run_until_idle().await.unwrap();
+    assert_eq!(completed.len(), 1);
+    assert!(completed.contains_key(&own_task.id));
+
+    let untouched = store
+        .list_assignments_for_task(&foreign_task.id)
+        .await
+        .unwrap();
+    assert!(untouched
+        .iter()
+        .all(|assignment| assignment.status == AssignmentStatus::Queued));
+}

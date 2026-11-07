@@ -1,6 +1,6 @@
 [package]
 name = "cowbot-desktop"
-version = "0.1.3"
+version = "0.1.4"
 description = "CowBot desktop application"
 license = "Apache-2.0"
 edition = "2021"
@@ -25,6 +25,7 @@ cowbot-agent = { path = "../../crates/cowbot-agent" }
 cowbot-client = { path = "../../crates/cowbot-client" }
 cowbot-core = { path = "../../crates/cowbot-core" }
 cowbot-llm = { path = "../../crates/cowbot-llm" }
+cowbot-service = { path = "../../crates/cowbot-service" }
 cowbot-tools = { path = "../../crates/cowbot-tools" }
 
 [dev-dependencies]

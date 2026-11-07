@@ -1,0 +1,310 @@
+use std::sync::Arc;
+
+use cowbot_bus::EventBus;
+use cowbot_core::agent::{AgentId, AgentProfile};
+use cowbot_core::approval::ApprovalLevel;
+use cowbot_core::assignment::{AssignmentOrigin, AssignmentRequester};
+use cowbot_core::channel::{Channel, ChannelId, ChannelMessage, Sender};
+use cowbot_core::error::{CowError, CowResult};
+use cowbot_core::identity::WorkspaceId;
+use cowbot_core::mention::resolve_mentions;
+use cowbot_core::task::{Task, TaskId, TaskStatus};
+use cowbot_llm::LlmProvider;
+use cowbot_store::Store;
+use cowbot_tools::ToolRegistry;
+
+use crate::channels::ChannelService;
+use crate::scheduler::{AssignmentScheduler, CrewRunOptions};
+
+/// How many channel messages are used as conversation context for one turn.
+const HISTORY_LIMIT: u32 = 20;
+
+/// Options for one channel turn.
+#[derive(Debug, Clone)]
+pub struct ChannelTurnOptions {
+    /// Approval policy applied to the tool calls of every agent in the turn.
+    pub approval_level: ApprovalLevel,
+    /// Maximum number of agents that may run at the same time.
+    pub max_concurrency: usize,
+}
+
+impl Default for ChannelTurnOptions {
+    fn default() -> Self {
+        Self {
+            approval_level: ApprovalLevel::Ask,
+            max_concurrency: 4,
+        }
+    }
+}
+
+/// What one channel turn did.
+#[derive(Debug, Clone, Default)]
+pub struct ChannelTurnReport {
+    /// Agents that were addressed by the message.
+    pub agents: Vec<AgentId>,
+    /// Mentioned names that matched no agent.
+    pub unknown_mentions: Vec<String>,
+    /// Tasks created for the turn.
+    pub tasks: Vec<TaskId>,
+}
+
+impl ChannelTurnReport {
+    pub fn is_empty(&self) -> bool {
+        self.agents.is_empty()
+    }
+}
+
+/// Turns channel messages that address agents into assignment-backed work.
+///
+/// The user's message is persisted by [`ChannelService`] before it reaches this
+/// service. Every mentioned agent gets a task in the channel, the assignment
+/// scheduler runs them, and each settled task posts its output back into the
+/// timeline as a message from that agent. Failures and unknown mentions are
+/// reported by the channel itself, so a user is never left without feedback.
+#[derive(Clone)]
+pub struct ChannelAgentService {
+    store: Store,
+    workspace_id: WorkspaceId,
+    channels: ChannelService,
+}
+
+impl ChannelAgentService {
+    pub fn new(store: Store, bus: EventBus, workspace_id: WorkspaceId) -> Self {
+        Self {
+            channels: ChannelService::new(store.clone(), bus),
+            store,
+            workspace_id,
+        }
+    }
+
+    /// Answer `message` on behalf of every agent it mentions.
+    ///
+    /// Returns an empty report when the message addresses nobody, leaving the
+    /// channel untouched. A message that mentions an unknown name, or a
+    /// workspace without agents, records a system notice so the user knows why
+    /// nothing happened.
+    pub async fn reply(
+        &self,
+        channel_id: &ChannelId,
+        message: &ChannelMessage,
+        llm: Arc<dyn LlmProvider>,
+        tools: ToolRegistry,
+        model: &str,
+        options: &ChannelTurnOptions,
+    ) -> CowResult<ChannelTurnReport> {
+        let Some(channel) = self.store.get_channel(channel_id).await? else {
+            return Err(CowError::Task(format!(
+                "channel '{channel_id}' was not found"
+            )));
+        };
+        let agents = self.store.list_agents(&self.workspace_id).await?;
+        let resolution = resolve_mentions(&message.content, &agents);
+
+        if agents.is_empty() {
+            if !resolution.is_empty() {
+                self.post_notice(
+                    &channel,
+                    "No agents in this workspace yet. Add a team from a template in Settings, then mention an agent by name.",
+                )
+                .await?;
+            }
+            return Ok(ChannelTurnReport {
+                unknown_mentions: resolution.unknown,
+                ..ChannelTurnReport::default()
+            });
+        }
+
+        if !resolution.unknown.is_empty() {
+            let available = agents
+                .iter()
+                .map(|agent| format!("@{}", agent.name))
+                .collect::<Vec<_>>()
+                .join(", ");
+            self.post_notice(
+                &channel,
+                &format!(
+                    "No agent matched {}. Available agents: {}.",
+                    resolution
+                        .unknown
+                        .iter()
+                        .map(|name| format!("@{name}"))
+                        .collect::<Vec<_>>()
+                        .join(", "),
+                    available
+                ),
+            )
+            .await?;
+        }
+
+        if resolution.agents.is_empty() {
+            return Ok(ChannelTurnReport {
+                unknown_mentions: resolution.unknown,
+                ..ChannelTurnReport::default()
+            });
+        }
+
+        let requester = match &message.sender {
+            Sender::User(id) => AssignmentRequester::User(id.clone()),
+            _ => AssignmentRequester::System,
+        };
+
+        // A scoped scheduler claims only the roots enqueued here, so a turn
+        // never picks up work from another turn or a visible crew run.
+        let mut scheduler = AssignmentScheduler::new(
+            self.store.clone(),
+            self.channels.bus().clone(),
+            self.workspace_id.clone(),
+            options.max_concurrency,
+        )
+        .with_scope();
+        let run_options = CrewRunOptions {
+            approval_level: options.approval_level,
+            channel_id: Some(channel.id.clone()),
+            max_concurrency: options.max_concurrency,
+        };
+
+        // History excludes this turn's own notices, so an "@Nobody" notice
+        // posted above does not lead the prompt.
+        let history = self.render_history(&channel, message, &agents).await?;
+
+        let mut tasks = Vec::new();
+        for agent in &resolution.agents {
+            scheduler.register_agent(agent.clone(), llm.clone(), tools.clone(), model);
+            let task = Self::turn_task(agent, &channel, message, &history);
+            scheduler
+                .enqueue(
+                    &task,
+                    requester.clone(),
+                    AssignmentOrigin::User,
+                    &run_options,
+                )
+                .await?;
+            tasks.push(task.id);
+        }
+
+        // A failing agent must not silence the others: the scheduler drains
+        // every root and the per-task status decides what gets posted.
+        let outcome = scheduler.run_until_idle().await;
+
+        for task_id in &tasks {
+            self.post_outcome(&channel, task_id).await?;
+        }
+
+        outcome?;
+        Ok(ChannelTurnReport {
+            agents: resolution
+                .agents
+                .iter()
+                .map(|agent| agent.id.clone())
+                .collect(),
+            unknown_mentions: resolution.unknown,
+            tasks,
+        })
+    }
+
+    fn turn_task(
+        agent: &AgentProfile,
+        channel: &Channel,
+        message: &ChannelMessage,
+        history: &str,
+    ) -> Task {
+        let author = match &message.sender {
+            Sender::User(_) => "the user".to_string(),
+            Sender::Agent(id) => format!("agent '{}'", id.0),
+            Sender::System => "the system".to_string(),
+        };
+
+        let description = format!(
+            "You were mentioned in the channel #{channel_name}.\n\n\
+             Recent channel messages:\n{history}\n\n\
+             Latest message from {author}:\n{content}\n\n\
+             Reply to the latest message as a teammate in this channel. \
+             Be concise, answer what was asked, and do not repeat the channel \
+             history back to the user.",
+            channel_name = channel.name,
+            history = history,
+            author = author,
+            content = message.content.trim(),
+        );
+
+        Task::new(
+            description,
+            "A concise reply addressed to the user, ready to post in the channel.",
+        )
+        .assign_to(agent.id.clone())
+    }
+
+    async fn post_outcome(&self, channel: &Channel, task_id: &TaskId) -> CowResult<()> {
+        let Some(task) = self.store.get_task(task_id).await? else {
+            return Ok(());
+        };
+        let Some(assignee) = task.assigned_agent.clone() else {
+            return Ok(());
+        };
+        let name = self
+            .store
+            .get_agent(&assignee)
+            .await?
+            .map(|agent| agent.name)
+            .unwrap_or_else(|| format!("Agent {}", assignee.0));
+
+        match &task.status {
+            TaskStatus::Completed { output } => {
+                let content = output.trim();
+                if content.is_empty() {
+                    self.post_notice(channel, &format!("{name} finished without a reply."))
+                        .await?;
+                } else {
+                    self.channels
+                        .post_message(&channel.id, Sender::Agent(assignee), content.to_string())
+                        .await?;
+                }
+            }
+            TaskStatus::Failed { error } => {
+                self.post_notice(channel, &format!("{name} could not answer: {error}"))
+                    .await?;
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    async fn render_history(
+        &self,
+        channel: &Channel,
+        message: &ChannelMessage,
+        agents: &[AgentProfile],
+    ) -> CowResult<String> {
+        let messages = self.store.list_messages(&channel.id, HISTORY_LIMIT).await?;
+
+        let mut history = String::new();
+        for entry in messages
+            .iter()
+            .filter(|entry| entry.id != message.id && entry.created_at < message.created_at)
+        {
+            let author = match &entry.sender {
+                Sender::User(_) => "User".to_string(),
+                Sender::Agent(id) => agents
+                    .iter()
+                    .find(|agent| &agent.id == id)
+                    .map(|agent| agent.name.clone())
+                    .unwrap_or_else(|| format!("Agent {}", id.0)),
+                Sender::System => "System".to_string(),
+            };
+            history.push_str(&format!("{author}: {}\n", entry.content.trim()));
+        }
+
+        if history.is_empty() {
+            Ok("(no earlier messages)".to_string())
+        } else {
+            Ok(history.trim_end().to_string())
+        }
+    }
+
+    async fn post_notice(&self, channel: &Channel, content: &str) -> CowResult<()> {
+        self.channels
+            .post_message(&channel.id, Sender::System, content.to_string())
+            .await?;
+        Ok(())
+    }
+}

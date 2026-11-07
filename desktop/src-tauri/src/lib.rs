@@ -32,6 +32,8 @@ pub struct AppState {
     pub data_dir: PathBuf,
     /// Task ids with a crew currently executing.
     pub running: Arc<Mutex<HashSet<String>>>,
+    /// Message ids with a channel turn currently executing.
+    pub replies: Arc<Mutex<HashSet<String>>>,
 }
 
 impl AppState {
@@ -152,6 +154,7 @@ pub fn run() {
                 config_path,
                 data_dir,
                 running: Arc::new(Mutex::new(HashSet::new())),
+                replies: Arc::new(Mutex::new(HashSet::new())),
             });
             Ok(())
         })

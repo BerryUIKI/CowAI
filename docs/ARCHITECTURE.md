@@ -61,11 +61,11 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 
 ### 3.2 Collaboration
 
-- Entities: `Channel`, `Thread`, `Message`, `Mention`, `TaskCard`, `ApprovalCard`.
+- Entities: `Channel` and `Message` (threads via `ChannelMessage::thread_id`). `Mention` is parsed from message text rather than stored (ADR-0022); `TaskCard` and `ApprovalCard` remain unmodelled.
 - Humans and agents are both channel members; messages are persisted and shown on a timeline.
-- `@Agent` mentions or task cards trigger tasks; agent reasoning, tool calls, approvals, and deliverables are written back to the channel.
+- A message that mentions an agent (`@Name`, or `@team`/`@all`/`@everyone`/`@here`) becomes one task per mentioned agent, run through the assignment scheduler with the channel's approval policy; the answer is written back to the channel as a message from that agent. Unknown mentions, failures, and empty answers produce a system notice (ADR-0022).
 - Channels are the primary collaboration surface but do not restrict usage: users can create channels and threads freely.
-- `cowbot-service` provides the local bootstrap (idempotent owner and default workspace) and channel/message services that persist writes before publishing `ChannelCreated` and `MessagePosted` events.
+- `cowbot-service` provides the local bootstrap (idempotent owner and default workspace), channel/message services that persist writes before publishing `ChannelCreated` and `MessagePosted` events, and the channel agent service that turns mentions into assignment-backed turns.
 
 ### 3.3 Agents and Templates
 
@@ -119,9 +119,9 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 ### 3.9 Access Layer
 
 - **Client abstraction**: `cowbot-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
-- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and a sectioned settings page in the sidebar footer for model providers, agents, templates, workspace transfer, and version/update controls. Workspaces live one per local database; Settings → Workspace creates empty workspaces, exports the active workspace as `.cowpkg`, imports a package into a new database, and switches between registered databases by restarting the app (ADR-0017). Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — and are stored in a local `config.json`; they are configured from a vendor-first catalogue, with the protocol as a form field, the endpoint's model list available through Fetch models, and several models per provider with one active model (ADR-0012, ADR-0016, ADR-0021). Providers can be added, edited, tested, and switched without restarting, and onboarding records its completion in the same file (ADR-0013). When enabled, the desktop checks GitHub Releases at launch and installs signed updates through the Tauri updater plugin; installing is refused while a crew runs (ADR-0018). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
+- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels (timeline, mention-driven agent replies with a per-channel approval policy, and a composer), tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and a sectioned settings page in the sidebar footer for model providers, agents, templates, workspace transfer, and version/update controls. Workspaces live one per local database; Settings → Workspace creates empty workspaces, exports the active workspace as `.cowpkg`, imports a package into a new database, and switches between registered databases by restarting the app (ADR-0017). Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — and are stored in a local `config.json`; they are configured from a vendor-first catalogue, with the protocol as a form field, the endpoint's model list available through Fetch models, and several models per provider with one active model (ADR-0012, ADR-0016, ADR-0021). Providers can be added, edited, tested, and switched without restarting, and onboarding records its completion in the same file (ADR-0013). When enabled, the desktop checks GitHub Releases at launch and installs signed updates through the Tauri updater plugin; installing is refused while a crew runs (ADR-0018). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
 - **HTTP/WebSocket API**: `cowbot-server` serves desktop team mode, the CLI, and a future browser entry point.
-- **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace; `run` executes the crew through the assignment scheduler with persisted history, `--channel`, `--concurrency`, and interactive approval prompts; `channel` and `message` list/create channels and list/post messages. Settings resolve from `--config`, `COWBOT_CONFIG`, or `cowbot.toml`, with command-line and environment values taking precedence (ADR-0020). Template-driven crews are not wired into the CLI yet.
+- **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace; `run` executes the crew through the assignment scheduler with persisted history, `--channel`, `--concurrency`, and interactive approval prompts; `channel` and `message` list/create channels and list/post messages, and `message post --wait` lets the mentioned agents answer before the command exits. Settings resolve from `--config`, `COWBOT_CONFIG`, or `cowbot.toml`, with command-line and environment values taking precedence (ADR-0020). Template-driven crews are not wired into the CLI yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
 
 ---
@@ -130,12 +130,12 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 
 ### 4.1 From Channel to Deliverable
 
-1. A user `@Agent`s, creates a task card, or starts a task from a team template in a channel.
-2. The orchestrator creates an assignment (root/parent, requester, assignee) and the scheduler dispatches it: one assignment per root at a time, independent roots concurrently.
+1. A user posts a channel message that mentions one or more agents, or creates a task in the Tasks view.
+2. The orchestrator creates an assignment (root/parent, requester, assignee) and the scheduler dispatches it: one assignment per root at a time, independent roots concurrently. A channel turn uses a scoped scheduler that claims only the roots it created (ADR-0023).
 3. An agent calls the LLM and produces text or tool-call requests.
 4. The approval policy decides: auto-approve or create an approval card.
-5. Tools execute in the sandbox; results are written back to the channel and task context.
-6. The task completes; deliverables, assignment events, and audit records are persisted.
+5. Tools execute in the sandbox; results are written back to the task context.
+6. The task completes; the channel turn posts the output back to the channel as a message from the agent, and deliverables, assignment events, and audit records are persisted.
 
 ### 4.2 Approval Policy (Multiple Modes)
 
