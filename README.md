@@ -85,7 +85,23 @@ cargo build --workspace --locked
 cargo run -p cowbot-cli -- init --db cowbot.db
 ```
 
-Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWBOT_DB`, then `cowbot.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
+Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWBOT_DB`, then `db` in `cowbot.toml`, then `cowbot.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
+
+### Configure once with `cowbot.toml`
+
+The CLI reads an optional `cowbot.toml` from the working directory. Pass
+`--config <path>` or set `COWBOT_CONFIG` to use another file:
+
+```toml
+db = "cowbot.db"
+model = "gpt-4o"
+base_url = "https://api.openai.com/v1"
+approval = "ask"       # ask | safe-auto | plan-only | trusted
+concurrency = 4        # cross-root concurrency limit
+```
+
+Command-line flags and environment variables override the file. API keys are
+never read from the file; keep them in `OPENAI_API_KEY`.
 
 ### Try an agent crew offline
 
@@ -124,7 +140,15 @@ These examples use a POSIX shell. In PowerShell, set the key with `$env:OPENAI_A
 ```bash
 cargo run -p cowbot-cli -- --help
 cargo run -p cowbot-cli -- tools
+cargo run -p cowbot-cli -- channel create --name general --topic "General"
+cargo run -p cowbot-cli -- channel list
+cargo run -p cowbot-cli -- message post --channel <id> --content "Starting the run"
+cargo run -p cowbot-cli -- message list --channel <id>
 ```
+
+`run --channel <id>` stores the crew's tasks in that channel, and
+`run --concurrency <n>` overrides the cross-root concurrency limit for one
+invocation.
 
 ### Move a workspace between installations
 
