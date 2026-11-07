@@ -25,6 +25,8 @@ These records accompany the [architecture](../ARCHITECTURE.md). A decision descr
 | [0019](0019-assignment-scheduler.md) | Assignment scheduler and cross-root concurrency |
 | [0020](0020-cli-configuration-and-channels.md) | CLI configuration and channel commands |
 | [0021](0021-vendor-first-model-providers.md) | Vendor-first model providers and model discovery |
+| [0022](0022-channel-mention-turns.md) | Channel mention turns and agent replies |
+| [0023](0023-channel-turn-scheduler-scope.md) | Scoped assignment scheduling for background turns |
 
 For a new decision, copy [the template](TEMPLATE.md), assign the next unused four-digit number, and use a descriptive English filename. Discuss it in a linked issue/PR. Record context, alternatives, consequences, and status; do not silently rewrite an accepted decision when direction changes. Add a superseding record and link both records instead.
 

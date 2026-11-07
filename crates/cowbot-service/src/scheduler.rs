@@ -1,5 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -93,6 +93,8 @@ pub struct AssignmentScheduler {
     workspace_id: WorkspaceId,
     executions: HashMap<AgentId, AgentExecution>,
     max_concurrency: usize,
+    /// When set, only assignments rooted in a task enqueued here are claimed.
+    scope: Option<Arc<StdMutex<HashSet<AssignmentId>>>>,
 }
 
 enum Claim {
@@ -121,6 +123,29 @@ impl AssignmentScheduler {
             workspace_id,
             executions: HashMap::new(),
             max_concurrency,
+            scope: None,
+        }
+    }
+
+    /// Limit this scheduler to the roots enqueued through it.
+    ///
+    /// Without a scope, [`Self::run_until_idle`] drains every queued assignment
+    /// in the database, which lets two schedulers started from different
+    /// callers race for the same work. A scoped scheduler only claims roots it
+    /// enqueued, so independent background runs (such as channel turns) stay
+    /// separate from each other and from visible crew runs.
+    pub fn with_scope(mut self) -> Self {
+        self.scope = Some(Arc::new(StdMutex::new(HashSet::new())));
+        self
+    }
+
+    fn tracks(&self, root_id: &AssignmentId) -> bool {
+        match &self.scope {
+            None => true,
+            Some(scope) => scope
+                .lock()
+                .map(|scope| scope.contains(root_id))
+                .unwrap_or(false),
         }
     }
 
@@ -154,6 +179,24 @@ impl AssignmentScheduler {
 
     /// Persist the task when needed and enqueue its root assignment.
     pub async fn enqueue(
+        &self,
+        task: &Task,
+        requester: AssignmentRequester,
+        origin: AssignmentOrigin,
+        options: &CrewRunOptions,
+    ) -> CowResult<Assignment> {
+        let assignment = self
+            .enqueue_untracked(task, requester, origin, options)
+            .await?;
+        if let Some(scope) = &self.scope {
+            if let Ok(mut scope) = scope.lock() {
+                scope.insert(assignment.root_id.clone());
+            }
+        }
+        Ok(assignment)
+    }
+
+    async fn enqueue_untracked(
         &self,
         task: &Task,
         requester: AssignmentRequester,
@@ -278,6 +321,9 @@ impl AssignmentScheduler {
                 .await?
             {
                 if active_roots.contains(&assignment.root_id) {
+                    continue;
+                }
+                if !self.tracks(&assignment.root_id) {
                     continue;
                 }
 

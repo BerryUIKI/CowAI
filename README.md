@@ -40,10 +40,10 @@ The Rust runtime and CLI work today. Phase 1 (the local/offline MVP) is complete
 | Agent crews | Roles, goals, backstories, tool-calling loops, and sequential workflows with context chaining |
 | Assignment runtime | Task trees, lifecycle event logs, budgets, stall guards, restart reconciliation, and a scheduler with wake/re-entry and cross-root concurrency |
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
-| Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
-| CLI | `init`, `run`, `tools`, `export`, `import`, `channel`, and `message`, with optional `cowbot.toml` configuration and `--channel`/`--concurrency` for runs |
+| Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus; `@Agent` mentions that turn a message into an assignment-backed answer in the channel |
+| CLI | `init`, `run`, `tools`, `export`, `import`, `channel`, and `message`, with optional `cowbot.toml` configuration, `--channel`/`--concurrency` for runs, and `message post --wait` to let mentioned agents answer |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, vendor-first model providers with model discovery, agents/templates, workspace creation/export/import/switching, and automatic update checks with in-app installation via Tauri |
+| Desktop shell | First-run onboarding; React channels with mention-driven agent replies and a per-channel approval policy, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, vendor-first model providers with model discovery, agents/templates, workspace creation/export/import/switching, and automatic update checks with in-app installation via Tauri |
 | Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow, plus signed updater artifacts and a `latest.json` manifest |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |

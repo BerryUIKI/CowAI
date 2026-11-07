@@ -38,8 +38,12 @@ export function listMessages(channelId: string, limit = 200): Promise<ChannelMes
   return invoke<ChannelMessage[]>("list_messages", { channelId, limit });
 }
 
-export function postMessage(channelId: string, content: string): Promise<ChannelMessage> {
-  return invoke<ChannelMessage>("post_message", { channelId, content });
+export function postMessage(
+  channelId: string,
+  content: string,
+  approvalLevel: ApprovalLevel,
+): Promise<ChannelMessage> {
+  return invoke<ChannelMessage>("post_message", { channelId, content, approvalLevel });
 }
 
 export function onCowbotEvent(handler: (event: CowEvent) => void): Promise<UnlistenFn> {
@@ -90,6 +94,18 @@ export interface RunFinished {
 
 export function onRunFinished(handler: (event: RunFinished) => void): Promise<UnlistenFn> {
   return listen<RunFinished>("cowbot-run-finished", (event) => handler(event.payload));
+}
+
+export interface ChannelReplyFinished {
+  message_id: string;
+  reply_count: number;
+  error: string | null;
+}
+
+export function onChannelReply(handler: (event: ChannelReplyFinished) => void): Promise<UnlistenFn> {
+  return listen<ChannelReplyFinished>("cowbot-channel-reply", (event) =>
+    handler(event.payload),
+  );
 }
 
 export function cancelTask(taskId: string, reason: string): Promise<void> {

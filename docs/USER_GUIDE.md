@@ -134,6 +134,17 @@ agent editor is not part of this release.
 ## Channels and tasks
 
 - **Channels** — create a channel, post messages, and follow the timeline.
+  Mention an agent by name to get an answer in the channel: `@Planner, which
+  module owns the parser?` The agents in the workspace are listed in the
+  channel header, and `@team` (also `@all`, `@everyone`, `@here`) addresses all
+  of them. Matching is case-insensitive; an unknown name produces a system
+  notice listing the agents that exist.
+- **Approval** — the dropdown in the channel header sets the approval policy
+  for answers in that channel. It uses the same policies as tasks, so a risky
+  tool call raised while an agent answers appears in **Approvals**.
+- A mention becomes a task for the mentioned agent: it is listed in **Tasks**
+  with its assignment, run, and tool calls, and it can be cancelled there. The
+  answer is also posted back to the channel as a message from that agent.
 - **Tasks** — create a task with a description, expected output, an agent, an
   optional channel, and an approval policy. Select the task and choose **Run**
   to execute the Planner → Coder → Reviewer crew. The task detail shows
@@ -141,6 +152,10 @@ agent editor is not part of this release.
 - **Cancel** stops a running task.
 
 Progress refreshes from live events; all history persists across restarts.
+
+> Answering needs a model provider. Without a configured provider nothing runs;
+> with a provider that cannot answer, the channel shows a system notice with
+> the error instead of staying silent.
 
 ### Approval policies
 
@@ -214,6 +229,7 @@ cowbot init
 cowbot channel create --name general --topic "General"
 cowbot channel list
 cowbot message post --channel <id> --content "Starting the run"
+cowbot message post --channel <id> --content "@Planner what next?" --wait
 cowbot message list --channel <id>
 cowbot run --task "Analyze and write code" --dry-run --channel <id>
 cowbot run --task "Fix the bug" --model gpt-4o --approval ask --concurrency 2
@@ -230,6 +246,8 @@ cowbot import --input my-workspace.cowpkg --db other.db
 - `--approval` accepts `ask`, `safe-auto`, `plan-only`, and `trusted`.
 - `--concurrency` bounds how many root assignments run at the same time.
 - `run --channel <id>` stores the crew's tasks in that channel.
+- `message post --wait` lets the agents mentioned in the message answer before
+  the command prints the channel; it uses the same provider settings as `run`.
 
 ## Troubleshooting
 
@@ -237,6 +255,11 @@ cowbot import --input my-workspace.cowpkg --db other.db
   models, agents, and workspaces.
 - **A task fails immediately** — check the active provider and connection test;
   with no provider, tasks run against the offline mock model.
+- **A channel message gets no answer** — agents answer when they are mentioned
+  by name (`@Planner`). Add agents from a template in **Settings → Team** first;
+  an unknown name posts a notice listing the agents that exist.
+- **An agent answer stops with an error** — the channel shows a system notice
+  with the model error; check the active provider in **Settings → Model**.
 - **A workspace cannot be switched** — finish or cancel running tasks first.
 - **A workspace shows Missing** — its database file was moved or deleted; remove
   it from the registry by restarting, or restore the file.
@@ -260,6 +283,8 @@ reporting, see [SECURITY.md](../SECURITY.md).
 
 - Local/offline single-user mode only: no server, remote sessions, or
   multi-user workspaces.
+- Channel answers are one turn per mentioned agent: no threads as conversation
+  scope, no proactive agent replies to unmentioned messages, and no streaming.
 - Sequential Planner → Coder → Reviewer crews; no hierarchical orchestration or
   DAG workflows.
 - No streaming responses, retries, rate limiting, or token accounting.

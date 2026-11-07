@@ -26,6 +26,7 @@ import {
   listTemplates,
   listToolCalls,
   onCowbotEvent,
+  onChannelReply,
   onRunFinished,
   pendingApprovals,
   postMessage,
@@ -53,7 +54,7 @@ type View = "channels" | "tasks" | "approvals" | "settings";
 
 const approvalLevels: ApprovalLevel[] = ["ask", "safe_auto", "plan_only", "trusted"];
 
-function senderLabel(message: ChannelMessage, session: ClientSession | null): string {
+function senderName(message: ChannelMessage, session: ClientSession | null): string {
   const sender = message.sender;
   if (sender.type === "System") return "System";
   if (sender.type === "User") {
@@ -62,9 +63,48 @@ function senderLabel(message: ChannelMessage, session: ClientSession | null): st
   return `Agent ${sender.id.slice(0, 8)}`;
 }
 
+function senderLabel(
+  message: ChannelMessage,
+  session: ClientSession | null,
+  agents: AgentProfile[],
+): string {
+  const sender = message.sender;
+  if (sender.type === "Agent") {
+    return agents.find((agent) => agent.id === sender.id)?.name ?? senderName(message, session);
+  }
+  return senderName(message, session);
+}
+
 function agentName(agents: AgentProfile[], id: string | null): string {
   if (!id) return "Unassigned";
   return agents.find((agent) => agent.id === id)?.name ?? `Agent ${id.slice(0, 8)}`;
+}
+
+const broadcastNames = ["team", "all", "everyone", "here"];
+
+function mentionedNames(content: string): string[] {
+  const names: string[] = [];
+  for (const match of content.matchAll(/(^|[^\w@])@([\p{L}\p{N}_-]+)/gu)) {
+    const name = match[2];
+    if (!names.some((existing) => existing.toLowerCase() === name.toLowerCase())) {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+function mentionsAgent(content: string, agents: AgentProfile[]): boolean {
+  const names = mentionedNames(content);
+  if (names.length === 0) return false;
+  return names.some(
+    (name) =>
+      broadcastNames.includes(name.toLowerCase()) ||
+      agents.some(
+        (agent) =>
+          agent.name.toLowerCase() === name.toLowerCase() ||
+          agent.id.toLowerCase() === name.toLowerCase(),
+      ),
+  );
 }
 
 export default function App() {
@@ -83,6 +123,7 @@ export default function App() {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
+  const [replying, setReplying] = useState(false);
   const [creatingChannel, setCreatingChannel] = useState(false);
   const [channelName, setChannelName] = useState("");
   const [channelTopic, setChannelTopic] = useState("");
@@ -92,6 +133,7 @@ export default function App() {
   const [taskAssignee, setTaskAssignee] = useState("");
   const [taskChannel, setTaskChannel] = useState("");
   const [taskApproval, setTaskApproval] = useState<ApprovalLevel>("ask");
+  const [channelApproval, setChannelApproval] = useState<ApprovalLevel>("ask");
   const [templateId, setTemplateId] = useState("");
   const [busy, setBusy] = useState<string | null>(null);
   const [runningTasks, setRunningTasks] = useState<Set<string>>(() => new Set());
@@ -331,6 +373,32 @@ export default function App() {
   }, [refreshTaskDetail, refreshTasks, selectedTaskId]);
 
   useEffect(() => {
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    onChannelReply((event) => {
+      setReplying(false);
+      if (event.error) {
+        setError(event.error);
+      }
+      refreshMessages(selectedId).catch((err) => setError(errorMessage(err)));
+    })
+      .then((stop) => {
+        if (cancelled) {
+          stop();
+        } else {
+          unlisten = stop;
+        }
+      })
+      .catch((err) => setError(errorMessage(err)));
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [refreshMessages, selectedId]);
+
+  useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages]);
 
@@ -367,7 +435,8 @@ export default function App() {
     setSending(true);
     setError(null);
     try {
-      await postMessage(selectedId, content);
+      const posted = await postMessage(selectedId, content, channelApproval);
+      setReplying(mentionsAgent(posted.content, agents));
       setDraft("");
       await refreshMessages(selectedId);
     } catch (err) {
@@ -694,7 +763,10 @@ export default function App() {
       </aside>
 
       <main className="main" inert={onboardingOpen}>
-        <UpdateBanner updater={updater} tasksRunning={runningTasks.size > 0} />
+        <UpdateBanner
+          updater={updater}
+          tasksRunning={runningTasks.size > 0 || replying}
+        />
 
         {error ? (
           <div className="error-banner" role="alert">
@@ -724,6 +796,34 @@ export default function App() {
                     {selectedChannel.topic.trim() || "No topic yet."}
                   </p>
                 </div>
+                {agents.length > 0 ? (
+                  <div className="channel-meta">
+                    <label className="channel-approval">
+                      <span>Approval</span>
+                      <select
+                        value={channelApproval}
+                        onChange={(event) =>
+                          setChannelApproval(event.target.value as ApprovalLevel)
+                        }
+                      >
+                        {approvalLevels.map((level) => (
+                          <option key={level} value={level}>
+                            {approvalLevelLabel(level)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <p className="channel-members">
+                      {agents
+                        .filter(
+                          (agent, index) =>
+                            agents.findIndex((other) => other.name === agent.name) === index,
+                        )
+                        .map((agent) => `@${agent.name}`)
+                        .join(" · ")}
+                    </p>
+                  </div>
+                ) : null}
               </header>
 
               <section
@@ -743,7 +843,7 @@ export default function App() {
                         <span className="message-dot" aria-hidden="true" />
                         <div className="message-head">
                           <span className={`message-sender ${message.sender.type.toLowerCase()}`}>
-                            {senderLabel(message, session)}
+                            {senderLabel(message, session, agents)}
                           </span>
                           <time className="message-time" dateTime={message.created_at}>
                             {formatTime(message.created_at)}
@@ -771,7 +871,9 @@ export default function App() {
                   value={draft}
                   onChange={(event) => setDraft(event.target.value)}
                   onKeyDown={handleComposerKeyDown}
-                  placeholder={`Write to #${selectedChannel.name}`}
+                  placeholder={`Write to #${selectedChannel.name}${
+                    agents.length > 0 ? " — mention @Agent to get a reply" : ""
+                  }`}
                   aria-label={`Message #${selectedChannel.name}`}
                   rows={1}
                 />
@@ -783,6 +885,11 @@ export default function App() {
                   {sending ? "Sending…" : "Send"}
                 </button>
               </form>
+              {replying ? (
+                <p className="composer-note" role="status">
+                  Agents are working on this message…
+                </p>
+              ) : null}
             </>
           ) : (
             <div className="empty-workspace">
@@ -959,7 +1066,7 @@ export default function App() {
             templateId={templateId}
             busy={busy}
             updater={updater}
-            tasksRunning={runningTasks.size > 0}
+            tasksRunning={runningTasks.size > 0 || replying}
             onSelectTemplate={setTemplateId}
             onAddAgents={handleAddAgents}
           />
