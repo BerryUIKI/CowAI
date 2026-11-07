@@ -31,4 +31,11 @@ mod tests {
         let res = provider.chat_complete(&req).await.unwrap();
         assert_eq!(res.content.unwrap(), "Mock response to: Hello CowBot");
     }
+
+    #[tokio::test]
+    async fn providers_without_a_catalogue_report_model_discovery_as_unsupported() {
+        let provider = MockLlmProvider::echo();
+
+        assert!(provider.list_models().await.is_err());
+    }
 }
