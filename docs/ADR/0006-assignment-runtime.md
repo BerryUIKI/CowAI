@@ -82,6 +82,8 @@ Deferred:
 - Background wake scheduler and cross-root concurrency.
 - Full OpenMausBot rule set (consult/notify edge cases, outward-action reconciliation, provider capability matrix).
 
+> **Update (2026-11-07)**: [ADR-0019](0019-assignment-scheduler.md) implements the background wake scheduler and cross-root concurrency. Hierarchical manager/DAG process types and the full rule set above remain deferred.
+
 ## Invariants for Phase 1.4
 
 1. No non-terminal assignment without an owner (running, queued, waiting, parked, or resuming).

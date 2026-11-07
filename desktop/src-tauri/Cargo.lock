@@ -704,6 +704,7 @@ dependencies = [
  "cowbot-agent",
  "cowbot-bus",
  "cowbot-core",
+ "cowbot-llm",
  "cowbot-store",
  "cowbot-tools",
  "serde_json",
