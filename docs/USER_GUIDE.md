@@ -262,8 +262,6 @@ reporting, see [SECURITY.md](../SECURITY.md).
   multi-user workspaces.
 - Sequential Planner → Coder → Reviewer crews; no hierarchical orchestration or
   DAG workflows.
-- No background wake/re-entry scheduler for delegated assignments (deferred by
-  ADR-0006).
 - No streaming responses, retries, rate limiting, or token accounting.
 - The subprocess sandbox is not OS-level isolation.
 - Workspace deletion and renaming are not available in the UI.

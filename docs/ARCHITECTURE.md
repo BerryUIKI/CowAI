@@ -81,7 +81,7 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 - Phase 1.4 introduces an assignment runtime (ADR-0006): each unit of agent work is an assignment record with `root_id` / `parent_id` / `depth`, origin, requester, assignee, mode, reply, status, execution/restart counters, and approval level.
 - Assignment lifecycle: `queued -> running -> waiting -> resume -> needs_input -> completed / failed / cancelled`. Every transition writes an append-only event in the same transaction.
 - Task status is a projection of the root assignment lifecycle: `pending -> in_progress -> completed / failed / cancelled`. It is updated in the same service calls as the assignment transition.
-- v1 scope (confirmed): single-agent tasks plus a sequential crew on top of assignments; per-root request/execution/wake budgets; stall guard; restart reconciliation.
+- v1 scope (confirmed): single-agent tasks plus a sequential crew on top of assignments; a scheduler that serializes each root and runs independent roots concurrently; per-root request/execution/wake budgets; stall guard; restart reconciliation.
 - Implementation status (Phase 1.4): the lifecycle, event log, stall guard, restart reconciliation, and budget checks are wired into `cowbot-service`. `AssignmentService` enforces the request budget in `enqueue_child`, the execution budget in `start`, and the wake budget in `wake_parent`. `cowbot-service::AssignmentScheduler` (ADR-0019) is the single dispatch path: it consumes `queued` roots and `resume` parents, runs independent roots concurrently up to a configurable limit, serializes the assignments of one root, injects completed dependency and child outputs, and fails dependents whose prerequisite did not complete. `CrewRunner` registers the crew's agents, enqueues the tasks, and runs the scheduler until idle. Every attempt records one `Run` with `Completed` or `Failed` status and one `ToolCallRecord` per executed tool call, including denied calls.
 - Later: hierarchical orchestration (manager agent delegation) and DAG workflows. A process-wide resident scheduler arrives with the server phase; the local scheduler lives for one crew run.
 - Tasks support prerequisite dependencies (`context_tasks`); prior deliverables are injected into downstream context.
@@ -99,6 +99,7 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 ### 3.6 Model Gateway
 
 - `LlmProvider` abstraction; v1 provides OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses clients (cloud APIs, relays, DeepSeek, Ollama, LocalAI, Codex-style endpoints) plus a Mock provider.
+- `LlmProvider::list_models` queries the endpoint's catalogue (`/models` for the OpenAI-style protocols, `/v1/models` for Anthropic); the desktop's vendor-first provider editor uses it to populate a provider's model list (ADR-0021).
 - Model configuration is workspace- or agent-scoped, with a connection test.
 - P1 adds streaming, retries/backoff, rate limiting, and token/cost accounting.
 
@@ -118,9 +119,9 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 ### 3.9 Access Layer
 
 - **Client abstraction**: `cowbot-client` exposes a transport-neutral `Client` trait. `LocalClient` calls the core in-process, bootstraps the local workspace, and runs startup reconciliation when it opens; the remote implementation arrives in Phase 2.3.
-- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and a sectioned settings page in the sidebar footer for model providers, agents, templates, workspace transfer, and version/update controls. Workspaces live one per local database; Settings → Workspace creates empty workspaces, exports the active workspace as `.cowpkg`, imports a package into a new database, and switches between registered databases by restarting the app (ADR-0017). Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — and are stored in a local `config.json`; they can be added, edited, tested, and switched without restarting (ADR-0012, ADR-0016), and onboarding records its completion in the same file (ADR-0013). When enabled, the desktop checks GitHub Releases at launch and installs signed updates through the Tauri updater plugin; installing is refused while a crew runs (ADR-0018). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
+- **Desktop UI**: Tauri v2 shell (`desktop/src-tauri`) with a React + TypeScript frontend (`desktop/`). It covers first-run onboarding, local session bootstrap, channels/messages, tasks (list, creation, detail with assignment/run history, cancellation, and desktop-initiated execution), approvals (list and decide), and a sectioned settings page in the sidebar footer for model providers, agents, templates, workspace transfer, and version/update controls. Workspaces live one per local database; Settings → Workspace creates empty workspaces, exports the active workspace as `.cowpkg`, imports a package into a new database, and switches between registered databases by restarting the app (ADR-0017). Providers record their protocol — OpenAI Chat Completions, Anthropic Messages, or OpenAI Responses — and are stored in a local `config.json`; they are configured from a vendor-first catalogue, with the protocol as a form field, the endpoint's model list available through Fetch models, and several models per provider with one active model (ADR-0012, ADR-0016, ADR-0021). Providers can be added, edited, tested, and switched without restarting, and onboarding records its completion in the same file (ADR-0013). When enabled, the desktop checks GitHub Releases at launch and installs signed updates through the Tauri updater plugin; installing is refused while a crew runs (ADR-0018). All workspace data access goes through `cowbot-client` via Tauri commands, never directly through `cowbot-store` or `cowbot-service`; model provider configuration is desktop runtime state owned by the Tauri backend. Release installers are built by the release workflow (ADR-0014).
 - **HTTP/WebSocket API**: `cowbot-server` serves desktop team mode, the CLI, and a future browser entry point.
-- **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace, `run` executes the sequential crew through the assignment runtime with persisted history and interactive approval prompts. Channel collaboration and template-driven crews are not wired into the CLI yet.
+- **CLI**: `cowbot` initializes and runs the local runtime through `cowbot-client`: `init` prepares the database and workspace; `run` executes the crew through the assignment scheduler with persisted history, `--channel`, `--concurrency`, and interactive approval prompts; `channel` and `message` list/create channels and list/post messages. Settings resolve from `--config`, `COWBOT_CONFIG`, or `cowbot.toml`, with command-line and environment values taking precedence (ADR-0020). Template-driven crews are not wired into the CLI yet.
 - **Webhooks / IM** (P1): Mattermost, Slack, Feishu, and others.
 
 ---
@@ -130,7 +131,7 @@ CLI (cowbot) -- cowbot-client -- local mode or remote server
 ### 4.1 From Channel to Deliverable
 
 1. A user `@Agent`s, creates a task card, or starts a task from a team template in a channel.
-2. The orchestrator creates an assignment (root/parent, requester, assignee) and dispatches it (sequential in v1).
+2. The orchestrator creates an assignment (root/parent, requester, assignee) and the scheduler dispatches it: one assignment per root at a time, independent roots concurrently.
 3. An agent calls the LLM and produces text or tool-call requests.
 4. The approval policy decides: auto-approve or create an approval card.
 5. Tools execute in the sandbox; results are written back to the channel and task context.
@@ -196,17 +197,17 @@ Inspired by Claude Code's permission modes:
 | `cowbot-core` | Domain model, errors, events, `Tool` trait | Existing |
 | `cowbot-bus` | Event bus and subscriptions | Existing |
 | `cowbot-tools` | Tool registry, sandbox backends, and static risk classification | Existing (subprocess) |
-| `cowbot-llm` | Model providers and types | Existing (OpenAI, Anthropic, Responses + Mock) |
+| `cowbot-llm` | Model providers and types | Existing (OpenAI, Anthropic, Responses + Mock; model listing) |
 | `cowbot-agent` | Agent loop and crew orchestration | Existing (sequential) |
-| `cowbot-cli` | `cowbot` CLI | Existing (standalone; not yet wired to `cowbot-service`) |
+| `cowbot-cli` | `cowbot` CLI | Existing (local runtime, `cowbot.toml`, channels/messages) |
 | `cowbot-store` | Persistence abstraction and SQLite/Postgres implementations | Existing (SQLite) |
-| `cowbot-service` | Local bootstrap, channel/message services, assignment runtime, approval service, sequential crew runner, template management, and event wiring | Existing |
+| `cowbot-service` | Local bootstrap, channel/message services, assignment runtime and scheduler, approval service, crew runner, template management, and event wiring | Existing |
 | `cowbot-server` | HTTP/WebSocket API, auth, multi-user | Planned |
 | `cowbot-client` | Unified local/remote client abstraction | Existing (local mode) |
-| `desktop/` | Tauri v2 shell + React/TypeScript frontend | Existing (channels and messages) |
-| `cowbot-package` | `.cowpkg` / `.cowtemplate` import/export | Planned |
-| `cowbot-desktop` | Tauri shell and frontend integration | Planned |
-| Frontend app | React + TypeScript (channels, tasks, approvals, agent management UI) | Planned |
+| `desktop/` | Tauri v2 shell + React/TypeScript frontend | Existing (channels, tasks, approvals, settings, model providers) |
+| `cowbot-package` | `.cowpkg` / `.cowtemplate` import/export | Existing |
+| `cowbot-desktop` | Tauri shell and frontend integration | Existing (`desktop/src-tauri`) |
+| Frontend app | React + TypeScript (channels, tasks, approvals, agent management UI) | Existing (`desktop/`) |
 
 ---
 

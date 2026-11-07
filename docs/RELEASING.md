@@ -4,7 +4,7 @@ This is a maintainer procedure, not a claim that automated releases or published
 
 1. Confirm the agreed milestone and release scope; verify documentation against implemented behavior.
 2. Create `release/<version>` from `dev`. Update the workspace version and CLI version string together; regenerate the lockfile only as needed.
-3. Write release notes covering changes, compatibility, known limitations, upgrade steps, and — for desktop releases — the update path. Do not mark planned work as shipped.
+3. Write release notes covering changes, compatibility, known limitations, upgrade steps, and — for desktop releases — the update path. Do not mark planned work as shipped. Save the published notes as `docs/releases/<version>.md` and add them to the `docs/releases/README.md` index.
 4. Confirm the `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets exist and that an offline backup of both is available. The private key never enters the repository. Without the secret the release build fails; losing the key or password prevents installed clients from receiving automatic updates.
 5. Run `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked`, and `cargo build --release --workspace --locked` on the intended supported platforms. Run desktop frontend and standalone Tauri checks separately when shipping the desktop; root workspace gates exclude it. Record actual results and platform coverage.
 6. Verify `cowbot --help`, mock execution, license metadata, and the included license. Inspect any distribution contents for secrets and required third-party notices.
