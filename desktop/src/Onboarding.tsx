@@ -123,10 +123,10 @@ export default function Onboarding({
               <p className="onboarding-kicker">Step 2 of 3</p>
               <h1 className="onboarding-title">Connect a model</h1>
               <p className="onboarding-copy">
-                Pick a protocol and connect an endpoint to run agents with a real
-                model: OpenAI-compatible, Anthropic-compatible, or Responses-compatible.
-                Skip this step and CowBot will use the offline mock model until you
-                configure one.
+                Pick a provider from the catalogue, or choose Custom to enter
+                your own endpoint, and connect it to run agents with a real
+                model. Skip this step and CowBot will use the offline mock model
+                until you configure one.
               </p>
               <div className="onboarding-provider">
                 <ModelProviderSettings showConfigPath={false} />

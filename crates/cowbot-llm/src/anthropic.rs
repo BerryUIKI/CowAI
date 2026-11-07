@@ -5,7 +5,7 @@
 //! both as `x-api-key` (official API) and as a bearer token (relays configured
 //! with `ANTHROPIC_AUTH_TOKEN`).
 
-use crate::endpoint::endpoint_url;
+use crate::endpoint::{endpoint_url, models_url, parse_model_ids};
 use crate::provider::LlmProvider;
 use crate::types::{
     ChatCompletionRequest, ChatCompletionResponse, ChatMessage, ChatRole, LlmToolCall,
@@ -40,6 +40,10 @@ impl AnthropicProvider {
 
     fn messages_url(&self) -> String {
         endpoint_url(&self.base_url, "/messages")
+    }
+
+    fn models_url(&self) -> String {
+        models_url(&self.base_url)
     }
 }
 
@@ -261,6 +265,44 @@ impl LlmProvider for AnthropicProvider {
 
         parse_response(payload)
     }
+
+    async fn list_models(&self) -> CowResult<Vec<String>> {
+        let url = self.models_url();
+        debug!(url = %url, "Fetching Anthropic model list");
+
+        let mut http = self
+            .client
+            .get(&url)
+            .header("anthropic-version", ANTHROPIC_VERSION);
+        if let Some(key) = &self.api_key {
+            http = http.header("x-api-key", key.as_str()).bearer_auth(key);
+        }
+
+        let response = http
+            .send()
+            .await
+            .map_err(|e| CowError::Llm(format!("HTTP request failed: {}", e)))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let err_text = response
+                .text()
+                .await
+                .unwrap_or_else(|_| "Failed to read response body".to_string());
+            error!(status = %status, body = %err_text, "Model list request returned non-200 status");
+            return Err(CowError::Llm(format!(
+                "API returned error status {}: {}",
+                status, err_text
+            )));
+        }
+
+        let payload: Value = response
+            .json()
+            .await
+            .map_err(|e| CowError::Llm(format!("Failed to parse response JSON: {}", e)))?;
+
+        parse_model_ids(&payload)
+    }
 }
 
 #[cfg(test)]
@@ -424,11 +466,13 @@ mod tests {
     fn endpoint_accepts_base_and_full_urls() {
         let provider = AnthropicProvider::new("http://127.0.0.1:8788", None);
         assert_eq!(provider.messages_url(), "http://127.0.0.1:8788/v1/messages");
+        assert_eq!(provider.models_url(), "http://127.0.0.1:8788/v1/models");
 
         let provider = AnthropicProvider::new("https://api.anthropic.com/v1/messages", None);
         assert_eq!(
             provider.messages_url(),
             "https://api.anthropic.com/v1/messages"
         );
+        assert_eq!(provider.models_url(), "https://api.anthropic.com/v1/models");
     }
 }

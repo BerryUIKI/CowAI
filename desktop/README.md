@@ -23,13 +23,17 @@ templates, workspace creation and transfer, and version and update controls).
 
 Model providers are OpenAI Chat Completions, Anthropic Messages, or OpenAI
 Responses endpoints kept in `config.json` under the same app-data directory as
-`cowbot.db`. Each provider records its protocol; the editor offers protocol
-presets and a custom base URL, and the Settings view can add, edit, test, and
-switch providers. The active one is used by the next crew run, and no active
-provider means the offline mock model. Files written before protocol selection
-existed load as OpenAI providers. API keys are stored in plain text in that file
-and are never sent back to the frontend. Environment variables do not configure
-the desktop (the CLI keeps its flags and environment variables).
+`cowbot.db`. **Add provider** opens a searchable, grouped vendor catalogue; each
+entry pre-fills a single form whose protocol is a dropdown, and **Custom** opens
+a blank form. A provider records its protocol, one or more known models, and the
+active model. **Fetch models** queries the endpoint's catalogue (falling back to
+manual entry), and the Settings view can add, edit, test, and switch providers.
+The active one is used by the next crew run, and no active provider means the
+offline mock model. Files written before protocol selection existed load as
+OpenAI providers, and files without a model list load with their active model as
+the only entry. API keys are stored in plain text in that file and are never
+sent back to the frontend. Environment variables do not configure the desktop
+(the CLI keeps its flags and environment variables).
 
 ## Workspaces and packages
 
@@ -102,7 +106,7 @@ The [release workflow](../.github/workflows/release.yml) builds installers on ma
 - **macOS:** universal `.dmg` for Apple Silicon and Intel
 - **Linux:** `.deb` and `.AppImage`
 
-Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. Tag runs also sign updater artifacts with the repository secrets and a final `updater-json` job publishes `latest.json` for every platform. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.2` for `0.1.2`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
+Manual runs upload the bundles as workflow artifacts. Tag runs create or update a draft GitHub Release; a maintainer publishes it after review. Tag runs also sign updater artifacts with the repository secrets and a final `updater-json` job publishes `latest.json` for every platform. The tag must match the version in `src-tauri/tauri.conf.json` (`v0.1.3` for `0.1.3`). GitHub offers manual dispatch only once the workflow exists on the default branch; tag builds run from the tagged commit.
 
 Builds are unsigned: macOS may require allowing the app in System Settings, and Windows may show a SmartScreen prompt. OS code signing and notarization remain follow-up work (ADR-0014); the updater's own minisign signature is implemented in ADR-0018.
 

@@ -17,7 +17,7 @@ use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_service::{
     bootstrap_local, bootstrap_local_named, ApprovalService, AssignmentService, ChannelService,
-    CrewRunner, LocalContext, TaskService, TemplateService,
+    CrewRunOptions, CrewRunner, LocalContext, TaskService, TemplateService,
 };
 use cowbot_store::Store;
 use tokio::sync::{broadcast, mpsc};
@@ -157,13 +157,31 @@ impl LocalClient {
         crew: &mut Crew,
         approval_level: ApprovalLevel,
     ) -> CowResult<HashMap<TaskId, String>> {
+        self.run_crew_with_options(
+            crew,
+            CrewRunOptions {
+                approval_level,
+                ..CrewRunOptions::default()
+            },
+        )
+        .await
+    }
+
+    /// Execute a crew with explicit scheduling options.
+    ///
+    /// Local-only for the same reason as [`Self::run_crew`].
+    pub async fn run_crew_with_options(
+        &self,
+        crew: &mut Crew,
+        options: CrewRunOptions,
+    ) -> CowResult<HashMap<TaskId, String>> {
         CrewRunner::new(self.store.clone(), self.bus.clone())
-            .run(
+            .run_with_options(
                 crew,
                 &self.session.workspace.id,
                 AssignmentRequester::User(self.session.user.id.0.clone()),
                 AssignmentOrigin::User,
-                approval_level,
+                options,
             )
             .await
     }

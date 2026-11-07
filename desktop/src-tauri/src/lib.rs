@@ -179,6 +179,7 @@ pub fn run() {
             commands::delete_model_provider,
             commands::activate_model_provider,
             commands::test_model_provider,
+            commands::fetch_provider_models,
             commands::get_onboarding_state,
             commands::complete_onboarding,
             commands::get_app_info,

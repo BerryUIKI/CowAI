@@ -38,18 +38,19 @@ The Rust runtime and CLI work today. Phase 1 (the local/offline MVP) is complete
 | Capability | Available now |
 | --- | --- |
 | Agent crews | Roles, goals, backstories, tool-calling loops, and sequential workflows with context chaining |
-| Assignment runtime | Task trees, lifecycle event logs, budgets, stall guards, and restart reconciliation |
+| Assignment runtime | Task trees, lifecycle event logs, budgets, stall guards, restart reconciliation, and a scheduler with wake/re-entry and cross-root concurrency |
 | Local persistence | Embedded SQLite migrations and repositories for workspaces, channels, agents, tasks, and audit events |
 | Collaboration services | Idempotent local owner/workspace bootstrap; channel and message persistence connected to the event bus |
+| CLI | `init`, `run`, `tools`, `export`, `import`, `channel`, and `message`, with optional `cowbot.toml` configuration and `--channel`/`--concurrency` for runs |
 | Agent and team templates | Built-in JSON templates, validation, template management, and `.cowtemplate` import/export |
-| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, switchable model providers, agents/templates, workspace creation/export/import/switching, and automatic update checks with in-app installation via Tauri |
+| Desktop shell | First-run onboarding; React channels/messages, task creation and history, run history and tool calls, cancellation, pending approval decisions, crew execution from a task, vendor-first model providers with model discovery, agents/templates, workspace creation/export/import/switching, and automatic update checks with in-app installation via Tauri |
 | Desktop installers | Unsigned NSIS/MSI, universal DMG, and deb/AppImage builds from the release workflow, plus signed updater artifacts and a `latest.json` manifest |
 | Tools | Subprocess execution and file operations with execution timeouts and output limits |
 | Approvals | Static risk classification, Ask/SafeAuto/PlanOnly/Trusted modes, pending approvals, and audit records |
 | Workspace packages | `.cowpkg` export and verified import with SHA-256 checksums, via the CLI and desktop |
-| Model providers | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including DeepSeek, Ollama, OpenRouter, and Claude Code-compatible relays; mock providers for offline testing |
+| Model providers | OpenAI Chat Completions, Anthropic Messages, and OpenAI Responses endpoints, including DeepSeek, Ollama, OpenRouter, and Claude Code-compatible relays; model listing, several models per provider, and mock providers for offline testing |
 
-**Phase 1 complete:** milestones 1.1–1.7 are implemented. The local client and Tauri desktop shell cover Channels, Tasks, Approvals, and Settings, switchable model providers across three API protocols, desktop-initiated crew execution, first-run onboarding, workspace creation and switching, `.cowpkg` export/import through both the CLI and desktop, and signed in-app updates delivered through GitHub Releases. The release workflow produces unsigned Windows, macOS, and Linux installers. The [user guide](docs/USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, updates, and troubleshooting. Operating-system code signing and remote mode (Phase 2) remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
+**Phase 1 complete:** milestones 1.1–1.7 are implemented. The local client and Tauri desktop shell cover Channels, Tasks, Approvals, and Settings, the assignment scheduler with cross-root concurrency, CLI configuration with `cowbot.toml` and channel/message commands, vendor-first model providers with endpoint model discovery across three API protocols, desktop-initiated crew execution, first-run onboarding, workspace creation and switching, `.cowpkg` export/import through both the CLI and desktop, and signed in-app updates delivered through GitHub Releases. The release workflow produces unsigned Windows, macOS, and Linux installers. The [user guide](docs/USER_GUIDE.md) covers installation, model setup, workspaces, tasks, approvals, updates, and troubleshooting. Operating-system code signing and remote mode (Phase 2) remain follow-up work. See the [roadmap](docs/ROADMAP.md) for scope and acceptance criteria.
 
 ## Naming and compatibility
 
@@ -85,7 +86,23 @@ cargo build --workspace --locked
 cargo run -p cowbot-cli -- init --db cowbot.db
 ```
 
-Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWBOT_DB`, then `cowbot.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
+Both `init` and `run` migrate SQLite, bootstrap the local workspace, and reconcile interrupted assignments and approvals. Database selection is `--db`, then `COWBOT_DB`, then `db` in `cowbot.toml`, then `cowbot.db` in the current directory. Runs persist tasks, assignments, tool calls, approvals, and audit records.
+
+### Configure once with `cowbot.toml`
+
+The CLI reads an optional `cowbot.toml` from the working directory. Pass
+`--config <path>` or set `COWBOT_CONFIG` to use another file:
+
+```toml
+db = "cowbot.db"
+model = "gpt-4o"
+base_url = "https://api.openai.com/v1"
+approval = "ask"       # ask | safe-auto | plan-only | trusted
+concurrency = 4        # cross-root concurrency limit
+```
+
+Command-line flags and environment variables override the file. API keys are
+never read from the file; keep them in `OPENAI_API_KEY`.
 
 ### Try an agent crew offline
 
@@ -124,7 +141,15 @@ These examples use a POSIX shell. In PowerShell, set the key with `$env:OPENAI_A
 ```bash
 cargo run -p cowbot-cli -- --help
 cargo run -p cowbot-cli -- tools
+cargo run -p cowbot-cli -- channel create --name general --topic "General"
+cargo run -p cowbot-cli -- channel list
+cargo run -p cowbot-cli -- message post --channel <id> --content "Starting the run"
+cargo run -p cowbot-cli -- message list --channel <id>
 ```
+
+`run --channel <id>` stores the crew's tasks in that channel, and
+`run --concurrency <n>` overrides the cross-root concurrency limit for one
+invocation.
 
 ### Move a workspace between installations
 
