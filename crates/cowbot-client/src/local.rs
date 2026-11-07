@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use cowbot_agent::Crew;
@@ -15,11 +16,14 @@ use cowbot_core::error::{CowError, CowResult};
 use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
+use cowbot_llm::LlmProvider;
 use cowbot_service::{
-    bootstrap_local, bootstrap_local_named, ApprovalService, AssignmentService, ChannelService,
-    CrewRunOptions, CrewRunner, LocalContext, TaskService, TemplateService,
+    bootstrap_local, bootstrap_local_named, ApprovalService, AssignmentService,
+    ChannelAgentService, ChannelService, ChannelTurnOptions, ChannelTurnReport, CrewRunOptions,
+    CrewRunner, LocalContext, TaskService, TemplateService,
 };
 use cowbot_store::Store;
+use cowbot_tools::ToolRegistry;
 use tokio::sync::{broadcast, mpsc};
 use tracing::warn;
 
@@ -31,6 +35,7 @@ pub struct LocalClient {
     bus: EventBus,
     session: ClientSession,
     channels: ChannelService,
+    channel_agents: ChannelAgentService,
     templates: TemplateService,
     tasks: TaskService,
     assignments: AssignmentService,
@@ -64,6 +69,8 @@ impl LocalClient {
         approvals.reconcile_on_startup().await?;
 
         let channels = ChannelService::new(store.clone(), bus.clone());
+        let channel_agents =
+            ChannelAgentService::new(store.clone(), bus.clone(), context.workspace.id.clone());
         let templates = TemplateService::new(store.clone());
         let tasks = TaskService::new(store.clone(), bus.clone());
         let session = ClientSession {
@@ -80,6 +87,7 @@ impl LocalClient {
             bus,
             session,
             channels,
+            channel_agents,
             templates,
             tasks,
             assignments,
@@ -183,6 +191,24 @@ impl LocalClient {
                 AssignmentOrigin::User,
                 options,
             )
+            .await
+    }
+    /// Answer a channel message on behalf of every agent it mentions.
+    ///
+    /// The caller posts the message first; this method routes it through the
+    /// assignment scheduler and writes each agent's answer back to the
+    /// timeline. Local-only for the same reason as [`Self::run_crew`].
+    pub async fn reply_to_mentions(
+        &self,
+        channel_id: &ChannelId,
+        message: &ChannelMessage,
+        llm: Arc<dyn LlmProvider>,
+        tools: ToolRegistry,
+        model: &str,
+        options: ChannelTurnOptions,
+    ) -> CowResult<ChannelTurnReport> {
+        self.channel_agents
+            .reply(channel_id, message, llm, tools, model, &options)
             .await
     }
 }

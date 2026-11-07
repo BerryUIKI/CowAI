@@ -6,6 +6,7 @@
 mod approvals;
 mod assignments;
 mod bootstrap;
+mod channel_agents;
 mod channels;
 mod crew_runner;
 mod scheduler;
@@ -15,6 +16,7 @@ mod templates;
 pub use approvals::{decision_for, ApprovalDecision, ApprovalService, ScopedApprovalGate};
 pub use assignments::AssignmentService;
 pub use bootstrap::{bootstrap_local, bootstrap_local_named, LocalContext};
+pub use channel_agents::{ChannelAgentService, ChannelTurnOptions, ChannelTurnReport};
 pub use channels::ChannelService;
 pub use crew_runner::CrewRunner;
 pub use scheduler::{AssignmentScheduler, CrewRunOptions};

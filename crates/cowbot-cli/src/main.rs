@@ -4,11 +4,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use cowbot_agent::{AgentInstance, Crew, StandardRoles};
 use cowbot_client::{Client, LocalClient};
 use cowbot_core::approval::ApprovalLevel;
-use cowbot_core::channel::{ChannelId, Sender};
+use cowbot_core::channel::{ChannelId, ChannelMessage, Sender};
 use cowbot_core::event::EventPayload;
 use cowbot_core::task::Task;
 use cowbot_llm::{LlmProvider, MockLlmProvider, OpenAiCompatibleProvider};
-use cowbot_service::CrewRunOptions;
+use cowbot_service::{ChannelTurnOptions, CrewRunOptions};
 use cowbot_store::Store;
 use cowbot_tools::{
     CodeExecutionTool, ReadFileTool, SandboxBackend, SubprocessSandbox, ToolRegistry, WriteFileTool,
@@ -162,6 +162,15 @@ enum MessageCommands {
         /// Optional thread id
         #[arg(long)]
         thread: Option<String>,
+        /// Let agents mentioned in the message answer before exiting
+        #[arg(long)]
+        wait: bool,
+        /// API key for the mentioned agents' model (defaults to OPENAI_API_KEY)
+        #[arg(long, env = "OPENAI_API_KEY", hide_env_values = true)]
+        api_key: Option<String>,
+        /// Run mentioned agents against the offline mock model
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -381,10 +390,73 @@ async fn handle_message(command: MessageCommands, settings: &Settings) -> anyhow
             channel,
             content,
             thread,
+            wait,
+            api_key,
+            dry_run,
         } => {
-            post_message(&client, &channel, &content, thread.as_deref()).await?;
+            let message = post_message(&client, &channel, &content, thread.as_deref()).await?;
+            if wait {
+                reply_to_mentions(&client, &message, settings, api_key, dry_run).await?;
+            }
         }
     }
+    Ok(())
+}
+
+/// Run one channel turn for the agents a message mentions.
+async fn reply_to_mentions(
+    client: &LocalClient,
+    message: &ChannelMessage,
+    settings: &Settings,
+    api_key: Option<String>,
+    dry_run: bool,
+) -> anyhow::Result<()> {
+    let sandbox = Arc::new(SubprocessSandbox::default());
+    let mut tools = ToolRegistry::new();
+    tools.register(Arc::new(CodeExecutionTool::new(sandbox)));
+    tools.register(Arc::new(ReadFileTool::new(None)));
+    tools.register(Arc::new(WriteFileTool::new(None)));
+
+    let llm: Arc<dyn LlmProvider> = if dry_run || (api_key.is_none() && settings.base_url.is_none())
+    {
+        println!("Note: replying with the offline MockLlmProvider.");
+        Arc::new(MockLlmProvider::echo())
+    } else {
+        let url = settings
+            .base_url
+            .clone()
+            .unwrap_or_else(|| "https://api.openai.com/v1".to_string());
+        Arc::new(OpenAiCompatibleProvider::new(url, api_key))
+    };
+
+    let report = client
+        .reply_to_mentions(
+            &message.channel_id,
+            message,
+            llm,
+            tools,
+            &settings.model,
+            ChannelTurnOptions {
+                approval_level: settings.approval.into(),
+                max_concurrency: settings.concurrency,
+            },
+        )
+        .await?;
+
+    if report.is_empty() {
+        println!("No agent was mentioned; nothing to answer.");
+        return Ok(());
+    }
+    println!(
+        "{} agent(s) answered in channel {}.",
+        report.agents.len(),
+        message.channel_id
+    );
+    for name in &report.unknown_mentions {
+        println!("  no agent matched @{name}");
+    }
+
+    list_messages(client, &message.channel_id.0, 20).await?;
     Ok(())
 }
 
@@ -426,7 +498,7 @@ async fn post_message(
     channel: &str,
     content: &str,
     thread: Option<&str>,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<ChannelMessage> {
     let channel_id = require_channel(client, channel).await?;
     let message = match thread {
         Some(thread) => {
@@ -437,7 +509,7 @@ async fn post_message(
         None => client.post_message(&channel_id, content).await?,
     };
     println!("Posted message {} to channel {}.", message.id, channel_id);
-    Ok(())
+    Ok(message)
 }
 
 async fn run_crew(

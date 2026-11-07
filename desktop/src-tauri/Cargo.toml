@@ -25,6 +25,7 @@ cowbot-agent = { path = "../../crates/cowbot-agent" }
 cowbot-client = { path = "../../crates/cowbot-client" }
 cowbot-core = { path = "../../crates/cowbot-core" }
 cowbot-llm = { path = "../../crates/cowbot-llm" }
+cowbot-service = { path = "../../crates/cowbot-service" }
 cowbot-tools = { path = "../../crates/cowbot-tools" }
 
 [dev-dependencies]

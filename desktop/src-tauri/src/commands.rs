@@ -9,6 +9,7 @@ use cowbot_core::run::{Run, RunId, ToolCallRecord};
 use cowbot_core::task::{Task, TaskId};
 use cowbot_core::template::TemplateDocument;
 use cowbot_llm::{ChatCompletionRequest, ChatMessage};
+use cowbot_service::ChannelTurnOptions;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
@@ -21,6 +22,14 @@ use crate::{config, AppState};
 pub struct RunFinished {
     pub task_id: String,
     pub ok: bool,
+    pub error: Option<String>,
+}
+
+/// Payload emitted on `cowbot-channel-reply` when a channel turn settles.
+#[derive(Debug, Clone, Serialize)]
+pub struct ChannelReplyFinished {
+    pub message_id: String,
+    pub reply_count: usize,
     pub error: Option<String>,
 }
 
@@ -73,14 +82,67 @@ pub async fn list_messages(
 #[tauri::command]
 pub async fn post_message(
     state: State<'_, AppState>,
+    app: AppHandle,
     channel_id: String,
     content: String,
+    approval_level: Option<ApprovalLevel>,
 ) -> Result<ChannelMessage, String> {
-    state
+    let channel_id = ChannelId::new(channel_id);
+    let message = state
         .client
-        .post_message(&ChannelId::new(channel_id), &content)
+        .post_message(&channel_id, &content)
         .await
-        .map_err(|error| error.to_string())
+        .map_err(|error| error.to_string())?;
+
+    // Agents answer in the background so the composer stays responsive; the
+    // timeline refreshes from MessagePosted events and the turn-finished event.
+    let client = state.client.clone();
+    let (llm, model) = state.runtime_model();
+    let tools = state.tools.clone();
+    let channel = channel_id.clone();
+    let posted = message.clone();
+    let reply_id = message.id.clone();
+    let running = state.replies.clone();
+    let approval_level = approval_level.unwrap_or(ApprovalLevel::Ask);
+    if !running.lock().insert(reply_id.clone()) {
+        return Ok(message);
+    }
+
+    tauri::async_runtime::spawn(async move {
+        let outcome = client
+            .reply_to_mentions(
+                &channel,
+                &posted,
+                llm,
+                tools,
+                &model,
+                ChannelTurnOptions {
+                    approval_level,
+                    max_concurrency: 4,
+                },
+            )
+            .await;
+        running.lock().remove(&reply_id);
+
+        let payload = match outcome {
+            Ok(report) if report.is_empty() => None,
+            Ok(report) => Some(ChannelReplyFinished {
+                message_id: reply_id,
+                reply_count: report.agents.len(),
+                error: None,
+            }),
+            Err(error) => Some(ChannelReplyFinished {
+                message_id: reply_id,
+                reply_count: 0,
+                error: Some(error.to_string()),
+            }),
+        };
+        if let Some(payload) = payload {
+            let _ = app.emit("cowbot-channel-reply", payload);
+        }
+    });
+
+    Ok(message)
 }
 
 #[tauri::command]
@@ -590,10 +652,19 @@ pub struct WorkspaceView {
 
 fn ensure_no_running_tasks(state: &AppState) -> Result<(), String> {
     let running = state.running.lock();
-    if running.is_empty() {
+    if !running.is_empty() {
+        return Err("Wait for running tasks to finish before changing workspaces.".to_string());
+    }
+    drop(running);
+
+    let replies = state.replies.lock();
+    if replies.is_empty() {
         Ok(())
     } else {
-        Err("Wait for running tasks to finish before changing workspaces.".to_string())
+        Err(
+            "Wait for agents to finish answering in channels before changing workspaces."
+                .to_string(),
+        )
     }
 }
 
